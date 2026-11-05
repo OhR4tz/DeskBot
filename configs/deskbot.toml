@@ -1,0 +1,34 @@
+# Motion stays disabled until an assembled-head calibration is completed.
+calibrated = false
+model = "/usr/share/imx500-models/imx500_network_ssd_mobilenetv2_fpnlite_320x320_pp.rpk"
+hand_model = "models/hand_landmarker.task"
+width = 640
+height = 480
+fps = 10
+max_hands = 1
+person_threshold = 0.55
+deadband = 0.065
+pan_gain = 0.18
+tilt_gain = 0.12
+max_speed = 28.0
+inference_timeout = 0.8
+lost_timeout = 1.2
+gesture_frames = 3
+gesture_cooldown = 3.0
+
+[pan]
+# World-relative degrees. Start narrower than target +/-55 until physically checked.
+center = 90.0
+direction = 1
+minimum = -10.0
+maximum = 10.0
+pulse_min = 750
+pulse_max = 2250
+
+[tilt]
+center = 90.0
+direction = 1
+minimum = -5.0
+maximum = 5.0
+pulse_min = 750
+pulse_max = 2250

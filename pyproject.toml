@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deskbot"
+version = "0.1.0"
+description = "Local single-camera pan/tilt desk robot"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+pi = ["adafruit-circuitpython-crickit>=2.3"]
+vision = ["mediapipe>=1.2.2,<2", "numpy<2.4"]
+
+[project.scripts]
+deskbot = "deskbot.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
