@@ -13,8 +13,8 @@ from .motion import Motion, Pose, FakeServos
 
 def calibrate(path: Path, config: Config) -> None:
     print("Manual calibration of the ASSEMBLED head. Pan port 1, tilt port 2.")
-    print("Pi powered separately; CRICKIT DC jack 5 V/4 A. Keep fingers and cable clear.")
-    print("Power servos, place head near neutral by hand with power OFF first.")
+    print("Pi uses USB-C; CRICKIT DC jack 5 V/4 A. Keep fingers and cable clear.")
+    print("Start near neutral without forcing gears; disconnect both supplies before hardware adjustments.")
     print("Attaching commands the configured center; disconnect power if it binds.")
     print("Start at narrow bounds, jog in <=2 degree steps, then expand ranges gradually.")
     print("Goal after clearance checks: pan -55..55, tilt -15..15 world degrees.")
@@ -27,7 +27,7 @@ def calibrate(path: Path, config: Config) -> None:
         motion.start()
         print("Commands: pan +2 | tilt -2 | neutral | center pan 91 | direction pan -1")
         print("          range pan -20 20 | show | save | arm | quit")
-        print("Edit pulse_min/pulse_max in TOML only with both supplies OFF; then recalibrate.")
+        print("Edit pulse_min/pulse_max only after quitting and unplugging CRICKIT barrel power; then recalibrate.")
         while True:
             parts = input("calibrate> ").lower().split()
             if not parts:

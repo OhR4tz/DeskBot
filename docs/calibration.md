@@ -1,0 +1,82 @@
+# Calibrate the assembled head
+
+Calibrate the complete assembly with its camera, ribbon, lid, and servo leads in place. The supplied 3MF is a static assembly and does not establish a safe moving range. Start with the shipped bounds, pan ±10° and tilt ±5°. The intended eventual range is pan ±55° (adjustable around ±50–60° if physically safe) and tilt ±15°.
+
+Software enforces a hard envelope of pan ±60° and tilt ±15°. Those are maximum accepted settings, **not evidence that the mechanism clears them**. Leave smaller limits wherever the real assembly needs them.
+
+## Before the first attachment
+
+1. Stop any DeskBot process or service. If installed, use `sudo systemctl stop deskbot`.
+2. Shut the Pi down and disconnect **both** USB-C and CRICKIT barrel supplies before checking wiring or repositioning hardware. The HAT's diode-coupled supply can keep the Pi powered when USB-C is unplugged.
+3. Check pan on CRICKIT port 1 and tilt on port 2. Support the head, free the ribbon and cables, and keep fingers away from pinch points. Both power disconnects must be within reach.
+4. Bring the unpowered assembly near its intended forward/level position only if that can be done without forcing the gears. If necessary, correct horn/linkage alignment with power off. Never force an MG90S shaft to match the software.
+5. Restore the Pi USB-C supply and reconnect over SSH. Keep the head supported when connecting the CRICKIT's 5 V / 4 A barrel supply.
+
+**The first servo command can jump.** The controller cannot read the servo's actual position. Its startup command is the configured center, initially logical servo angle 90°, which is not guaranteed to be physical forward/level. Narrow software bounds and the slew limiter cannot prevent this initial jump. If startup cannot be made safe on the assembly, stop and correct the unpowered mechanical alignment before continuing.
+
+The mapping assumes approximately 1:1 servo-to-head angles. If the mechanism uses a different ratio, measured head travel must guide your limits; the configured degrees are not a physical angle measurement.
+
+## Start the interactive tool
+
+From the Pi's project directory:
+
+```bash
+.venv/bin/deskbot calibrate
+```
+
+Read the prompt, confirm the assembly is ready, and type **`ATTACH`** only when prepared for both servos to receive their center commands. A different response exits without attaching. After attachment, `show` displays the current logical pose and settings.
+
+If anything binds, strains, buzzes persistently, heats, or pulls the ribbon, disconnect power promptly. Do not use `neutral` to force a binding head back through an obstruction. Correct the issue with both supplies off and restart with narrower limits.
+
+## Establish center and direction
+
+Commands are typed at `calibrate>`, not at the Linux shell:
+
+| Command | Effect |
+| --- | --- |
+| `show` | Print pose, axis settings, and calibration state. |
+| `pan +1` / `pan -1` | Jog pan by 1° within the current bounds. |
+| `tilt +1` / `tilt -1` | Jog tilt by 1° within the current bounds. |
+| `neutral` | Move both axes back to logical zero within the checked path. |
+| `center pan 91` | At neutral, set the pan center to 91°; changes are limited to 2° at a time. |
+| `direction pan -1` | At neutral, reverse the mapping for pan. `1` is the other valid direction. |
+| `range pan -15 15` | Change pan bounds; each end may change by at most 5° per edit. |
+| `save` | Save current settings; this does not complete calibration. |
+| `arm` | Check endpoint visits and request explicit calibration confirmation. |
+| `quit` | Release servo pulses and leave the tool. |
+
+Use `tilt` instead of `pan` for its corresponding center, direction, or range command. Jogs must be greater than zero and at most 2° in magnitude. The tool rejects jogs outside the current bounds.
+
+Use tiny jogs to check direction. Positive pan should turn toward a target to the right in the camera image; positive tilt should look upward. Return to neutral before changing `direction`. At neutral, adjust each `center` in small increments until logical zero is a suitable physical forward/level position. Center changes themselves command motion, so inspect each small change. Use power-off horn alignment if a large correction is needed.
+
+Changing center or direction disarms calibration and clears that axis's endpoint visits. Set them before exploring the larger range. Use `save` to keep the checked settings.
+
+Pulse widths (`pulse_min` and `pulse_max`, initially 750 and 2250 microseconds) are not adjustable live. A changed pulse mapping can change the physical center and travel. If your particular servo needs another mapping, stop DeskBot and unplug the CRICKIT barrel supply. Keep Pi USB-C power on for SSH, then use `nano configs/deskbot.toml` to edit the pulse values, set `calibrated = false`, and restore narrow bounds. With the barrel unplugged, the HAT diode prevents Pi USB-C from feeding the servo power rail. Deliberately reconnect servo power and repeat attachment and calibration afterward. Disconnect **both** supplies before handling wiring, electrical connectors, or the mechanical assembly.
+
+## Expand only after checking clearance
+
+Begin by approaching both ends of the initial pan range with repeated small jogs while tilt is neutral. Inspect the entire path, not only the endpoint. Return to neutral and do the same for tilt. Use the camera/ribbon's actual installed position when checking.
+
+To grow pan toward ±55°, the practical range stages are **±10 → ±15 → ±20 → ±25 → ±30 → ±35 → ±40 → ±45 → ±50 → ±55**. For tilt they are **±5 → ±10 → ±15**. At each stage:
+
+1. Check that the next small expansion appears clear with the head supported and cables free.
+2. At the prompt, change only that stage's bounds, for example `range pan -15 15` after checking the current ±10° path.
+3. Approach each newly allowed end in 1–2° jogs, stopping immediately if clearance becomes uncertain. For an odd endpoint such as 15°, the last jog may be 1°.
+4. Return through the checked path to neutral before the next expansion. Do not paste a sequence that automatically traverses multiple stages.
+
+Check combined poses too: clearance at pan +55° with tilt at zero does not establish clearance at pan +55° with tilt +15° or -15°. Slowly approach all four corners of your chosen final range with the same small jogs, checking ribbon slack, the lid opening, servo leads, and body/head contact along each path. Choose smaller or asymmetric limits if needed. When contracting a range, first return the current pose inside the proposed bounds; each range edit is still limited to 5° per end.
+
+## Save and explicitly arm
+
+Before arming, visit both configured endpoints of **each axis in this session**, check the combined corners, and return to neutral. Then type:
+
+```text
+save
+arm
+```
+
+The tool requires endpoint visits within 1° of each configured end. This checks your command history, not mechanical clearance. After your physical checks, type **`CALIBRATED`** at the confirmation prompt. This writes `calibrated = true` to the configuration. `quit` releases both channels; support the head because releasing pulses removes holding torque.
+
+Do not set `calibrated = true` by hand to bypass this process. Recalibrate after changing the camera/cable routing, horn alignment, center, direction, pulse mapping, or allowed range. Configuration files can be edited outside the tool, so the saved flag cannot verify that the physical assembly remains unchanged.
+
+Now return to [the interactive hardware run in setup](setup.md#7-calibrate-then-run-interactively). Keep automatic startup disabled until the real tracking and both gesture reactions have been checked at your chosen limits.
