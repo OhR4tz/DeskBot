@@ -27,6 +27,8 @@ Reactions require repeated matching frames, use a global cooldown, and temporari
 
 The downward reaction waits for the slew-limited commanded pose before starting its hold and return. This is command progress, not measured servo position: MG90S servos provide no feedback. A reaction already underway finishes even if looking away temporarily loses the person detection.
 
+In a follow-on motor-enabled trial on 2026-11-09, the log recorded all four gestures. The operator confirmed the revised rock-on nods, thumbs-down wiggle, and thumbs-up circle all worked. The trial was stopped after confirmation; automatic startup remains unconfigured.
+
 ## Motion and configuration
 
 Only `motion.py` writes servo commands. It maps world-relative pan/tilt through each axis's center and direction, clamps targets, and limits travel rate. Startup directly commands the configured centers because positional MG90S servos provide no position feedback. First electrically center each unknown servo unloaded, then index its horn with power off; see [the centering and initial-jump precautions](calibration.md#before-the-first-attachment).

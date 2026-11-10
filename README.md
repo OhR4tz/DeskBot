@@ -17,6 +17,6 @@ Before assembled calibration, use the [detached centering workflow](docs/calibra
 
 **Power:** use the Pi's USB-C wall supply and the CRICKIT's 5 V / 4 A barrel supply. Their rails are diode coupled through the HAT, so unplugging Pi USB-C alone does not guarantee that the Pi is off. Shut down and disconnect **both supplies** before wiring or adjusting the assembly.
 
-This is a prototype. The hardware-free suite contains 40 tests. On the assembled robot, the operator confirmed pan ±70°, tilt −30°/+40°, all four corners clear, and the final face-tracking tuning. Rock-on and middle finger were recognized during motor-enabled trials. The new thumbs-up/down gestures and revised nod routine need live confirmation. Gesture recognition uses heuristics and can vary with hands, viewpoint, and lighting. See the [validation details](docs/architecture.md#repository-map-and-development-checks).
+This is a prototype. The hardware-free suite contains 40 tests. On the assembled robot, the operator confirmed pan ±70°, tilt −30°/+40°, all four corners clear, and the final face-tracking tuning. All four gestures appeared in motor-enabled trial logs, and the operator confirmed the revised rock-on nods, thumbs-down wiggle, and thumbs-up circle work. Gesture recognition uses heuristics and can vary with hands, viewpoint, and lighting. See the [validation details](docs/architecture.md#repository-map-and-development-checks).
 
 Private repository: [OhR4tz/DeskBot](https://github.com/OhR4tz/DeskBot). Installation requires access to that repository.
