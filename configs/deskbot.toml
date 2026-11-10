@@ -2,6 +2,7 @@
 calibrated = false
 model = "/usr/share/imx500-models/imx500_network_ssd_mobilenetv2_fpnlite_320x320_pp.rpk"
 hand_model = "models/hand_landmarker.task"
+face_model = "models/blaze_face_short_range.tflite"
 width = 640
 height = 480
 fps = 10

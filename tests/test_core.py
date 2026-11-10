@@ -279,6 +279,26 @@ class CenterServoTests(unittest.TestCase):
 
 
 class TrackerTests(unittest.TestCase):
+    def test_small_face_detection_jitter_at_center_does_not_move_head(self):
+        cfg = replace(config(), deadband=0.025, fps=20)
+        tracker = TargetTracker(cfg, aim_fraction=0.5)
+        for step, jitter in enumerate((0, 5, -5, 4, -4, 2, -2, 0)):
+            tracker.select([Detection(Box(280 + jitter, 200 - jitter, 80, 80), .9)], step / 20)
+            self.assertEqual(tracker.aim(Pose(), step / 20), Pose())
+
+    def test_tracking_smooths_vertical_aim_and_limits_velocity_changes(self):
+        cfg = replace(config(), deadband=0.025, pan_gain=0.35, tilt_gain=0.25, max_speed=60)
+        tracker = TargetTracker(cfg, aim_fraction=0.5)
+        tracker.select([Detection(Box(280, 200, 80, 80), .9)], 0)
+        self.assertEqual(tracker.aim(Pose(), 0), Pose())
+        tracker.select([Detection(Box(310, 180, 80, 80), .9)], .1)
+        self.assertAlmostEqual(tracker.smoothed[1], 225)
+        goal = tracker.aim(Pose(), .1)
+        self.assertLess(goal.pan, 0)
+        self.assertGreater(goal.tilt, 0)
+        self.assertLessEqual(abs(goal.pan), 1.2)
+        self.assertLessEqual(abs(goal.tilt), 1.2)
+
     def test_sticky_target_and_stale_expiry(self):
         tracker = TargetTracker(config())
         a = Detection(Box(100, 50, 150, 350), .9)
@@ -343,6 +363,45 @@ class GestureTests(unittest.TestCase):
 
 
 class IntegrationTests(unittest.TestCase):
+    def test_face_center_overrides_opposite_person_box_aim(self):
+        cfg = replace(config(), deadband=0.025)
+        robot = Robot(cfg)
+        person = [Detection(Box(50, 30, 560, 430), .9)]
+        face = Box(120, 300, 80, 80)
+        status, goal = robot.process(Frame(None, person, [], faces=[face]), 0)
+        self.assertIn('aim=face', status)
+        self.assertGreater(goal.pan, 0)
+        self.assertLess(goal.tilt, 0)
+
+    def test_face_tracks_without_person_and_ignores_old_frames(self):
+        motion = Motion(config(), FakeServos())
+        motion.start()
+        robot = Robot(config(), motion)
+        frame = Frame(None, [], [], faces=[Box(450, 100, 80, 80)])
+        robot.process(frame, 0)
+        status, _ = robot.process(frame, .1)
+        self.assertIn('person=no face=yes aim=face', status)
+        self.assertLess(motion.pose.pan, 0)
+        self.assertGreater(motion.pose.tilt, 0)
+        before = motion.pose
+        old = Frame(None, [], [], captured_at=0, faces=[Box(50, 300, 80, 80)])
+        status, _ = robot.process(old, 2)
+        self.assertIn('face=no aim=hold', status)
+        self.assertEqual(motion.pose, before)
+
+    def test_face_outside_selected_person_is_rejected(self):
+        robot = Robot(config())
+        person = [Detection(Box(20, 20, 180, 400), .9)]
+        status, _ = robot.process(Frame(None, person, [], faces=[Box(480, 80, 80, 80)]), 0)
+        self.assertIn('face=no aim=person', status)
+
+    def test_downcast_owns_motion_while_face_is_visible(self):
+        robot = Robot(config())
+        robot.behavior.trigger('middle_finger', 0, Pose())
+        status, goal = robot.process(Frame(None, [], [], faces=[Box(280, 60, 80, 80)]), .1)
+        self.assertIn('face=yes', status)
+        self.assertEqual(goal.tilt, robot.config.tilt.minimum)
+
     def test_full_downcast_reaches_limit_holds_and_returns_at_slow_frame_rates(self):
         cfg = replace(config(), tilt=Axis(83, 1, -30, 40), max_speed=60)
         for interval in (0.1, 0.5):

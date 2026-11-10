@@ -17,6 +17,7 @@ class Frame:
     detections: list[Detection] | None
     hands: list[list[Point]]
     captured_at: float | None = None
+    faces: list[Box] | None = None
 
 
 def parse_ssd(outputs: Any, intrinsics: Any, imx500: Any, metadata: dict,
@@ -47,6 +48,7 @@ class CameraVision:
         self.want_hands = hands
         self.cam = None
         self.landmarker = None
+        self.face_detector = None
         self._last_timestamp_ms = -1
 
     def __enter__(self) -> "CameraVision":
@@ -54,6 +56,8 @@ class CameraVision:
             raise FileNotFoundError(f"IMX500 model missing: {self.config.model}")
         if self.want_hands and not Path(self.config.hand_model).is_file():
             raise FileNotFoundError(f"hand model missing: {self.config.hand_model}; run scripts/install-pi.sh")
+        if not Path(self.config.face_model).is_file():
+            raise FileNotFoundError(f"face model missing: {self.config.face_model}; run scripts/install-pi.sh")
         from picamera2.devices import IMX500
         from picamera2 import Picamera2
         from picamera2.devices.imx500 import NetworkIntrinsics
@@ -67,15 +71,21 @@ class CameraVision:
         # libcamera BGR888 is RGB in numpy byte order; MediaPipe expects RGB.
         camera_config = self.cam.create_preview_configuration(
             main={"size": (self.config.width, self.config.height), "format": "BGR888"},
-            controls={"FrameRate": min(self.config.fps, self.intrinsics.inference_rate)},
+            # CPU face/hand updates need not wait for the person model's cadence.
+            controls={"FrameRate": self.config.fps},
             buffer_count=4, queue=False)
         try:
             self.cam.start(camera_config, show_preview=False)
             if self.intrinsics.preserve_aspect_ratio:
                 self.imx500.set_auto_aspect_ratio()
+            import mediapipe as mp
+            self.mp = mp
+            self.face_detector = mp.tasks.vision.FaceDetector.create_from_options(
+                mp.tasks.vision.FaceDetectorOptions(
+                    base_options=mp.tasks.BaseOptions(model_asset_path=self.config.face_model),
+                    running_mode=mp.tasks.vision.RunningMode.VIDEO,
+                    min_detection_confidence=0.6))
             if self.want_hands:
-                import mediapipe as mp
-                self.mp = mp
                 opts = mp.tasks.vision.HandLandmarkerOptions(
                     base_options=mp.tasks.BaseOptions(model_asset_path=self.config.hand_model),
                     running_mode=mp.tasks.vision.RunningMode.VIDEO,
@@ -99,14 +109,18 @@ class CameraVision:
         finally:
             request.release()
         hands: list[list[Point]] = []
+        timestamp_ms = max(self._last_timestamp_ms + 1, int(captured_at * 1000))
+        self._last_timestamp_ms = timestamp_ms
+        mp_image = self.mp.Image(image_format=self.mp.ImageFormat.SRGB, data=rgb)
+        result = self.face_detector.detect_for_video(mp_image, timestamp_ms)
+        faces = [Box(float(d.bounding_box.origin_x), float(d.bounding_box.origin_y),
+                     float(d.bounding_box.width), float(d.bounding_box.height))
+                 for d in result.detections]
         if self.landmarker is not None:
-            timestamp_ms = max(self._last_timestamp_ms + 1, int(captured_at * 1000))
-            self._last_timestamp_ms = timestamp_ms
-            result = self.landmarker.detect_for_video(
-                self.mp.Image(image_format=self.mp.ImageFormat.SRGB, data=rgb), timestamp_ms)
+            result = self.landmarker.detect_for_video(mp_image, timestamp_ms)
             hands = [[Point(float(p.x), float(p.y), float(p.z)) for p in hand]
                      for hand in result.hand_landmarks]
-        return Frame(rgb, detections, hands, captured_at)
+        return Frame(rgb, detections, hands, captured_at, faces)
 
     def close(self) -> None:
         try:
@@ -114,12 +128,17 @@ class CameraVision:
                 self.landmarker.close()
                 self.landmarker = None
         finally:
-            if self.cam is not None:
-                try:
-                    self.cam.stop()
-                finally:
-                    self.cam.close()
-                    self.cam = None
+            try:
+                if self.face_detector is not None:
+                    self.face_detector.close()
+                    self.face_detector = None
+            finally:
+                if self.cam is not None:
+                    try:
+                        self.cam.stop()
+                    finally:
+                        self.cam.close()
+                        self.cam = None
 
     def __exit__(self, *_: object) -> None:
         self.close()

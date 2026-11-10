@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import time
 import signal
+from dataclasses import replace
 from typing import Any
 
 from .behavior import Behavior
 from .config import Config
 from .gesture import GestureGate, classify
 from .motion import Motion, Pose
-from .tracking import Box, TargetTracker
+from .tracking import Box, Detection, TargetTracker
 
 
 class Robot:
@@ -17,6 +18,8 @@ class Robot:
         self.config = config
         self.motion = motion
         self.tracker = TargetTracker(config)
+        self.face_tracker = TargetTracker(
+            replace(config, lost_timeout=0.4, inference_timeout=0.4), aim_fraction=0.5)
         self.behavior = Behavior(config)
         self.gates = [GestureGate(config.gesture_frames, config.gesture_cooldown)
                       for _ in range(2)]
@@ -34,10 +37,21 @@ class Robot:
         selected = self.tracker.select(detections, now)
         fresh = (detections is not None and
                  self.tracker.last_seen == now and selected is not None)
-        if fresh:
-            self.target = self.tracker.aim(self.motion.pose if self.motion else self.target)
-        elif selected is None:
+        faces = None if too_old else frame.faces
+        face_detections = None if faces is None else [
+            Detection(box, 1.0) for box in faces
+            if selected is None or selected.contains(*box.center,
+                margin=0.15 * max(selected.width, selected.height))]
+        face = self.face_tracker.select(face_detections, now)
+        fresh_face = face is not None and self.face_tracker.last_seen == now
+        aim_tracker = self.face_tracker if fresh_face else self.tracker if face is None and fresh else None
+        if aim_tracker is not None:
+            self.target = aim_tracker.aim(self.motion.pose if self.motion else self.target, now)
+        else:
             self.target = self.motion.pose if self.motion else self.target
+        for tracker in (self.tracker, self.face_tracker):
+            if tracker is not aim_tracker or self.behavior.kind is not None:
+                tracker.reset_motion()
         # Assign by wrist proximity, since MediaPipe result order can swap.
         matched: dict[int, Any] = {}
         used: set[int] = set()
@@ -63,7 +77,7 @@ class Robot:
         for i, gate in enumerate(self.gates):
             hand = matched.get(i)
             kind = None
-            if hand is not None and selected is not None and fresh:
+            if hand is not None and selected is not None and (fresh or fresh_face):
                 wrist = hand[0]
                 if selected.contains(wrist.x * self.config.width,
                                      wrist.y * self.config.height,
@@ -83,8 +97,13 @@ class Robot:
             self.motion.step(goal, dt)
         self.last_step = now
         status = (f"person={'yes' if fresh else 'stale' if selected else 'no'} "
+                  f"face={'yes' if fresh_face else 'stale' if face else 'no'} "
+                  f"aim={'face' if fresh_face else 'person' if aim_tracker else 'hold'} "
                   f"hands={len(hands)} reaction={self.behavior.kind or '-'} "
                   f"target=({goal.pan:+.1f},{goal.tilt:+.1f})")
+        if fresh_face:
+            cx, cy = face.center
+            status += f" face_error_px=({cx - self.config.width / 2:+.0f},{cy - self.config.height / 2:+.0f})"
         return status, goal
 
 
@@ -109,13 +128,19 @@ def run(config: Config, *, hardware: bool, preview: bool = False,
         with CameraVision(config, hands=True) as vision:
             if motion:
                 motion.start()
+            window_started = time.monotonic()
+            window_frames = 0
             while True:
                 frame = vision.capture()
                 now = time.monotonic()
+                window_frames += 1
                 status, _ = robot.process(frame, now)
                 if now - robot.last_status >= 1.0:
-                    print(status, flush=True)
+                    fps = window_frames / max(now - window_started, 0.001)
+                    print(f"fps={fps:.1f} {status}", flush=True)
                     robot.last_status = now
+                    window_started = now
+                    window_frames = 0
                 if preview:
                     display = cv2.cvtColor(frame.rgb, cv2.COLOR_RGB2BGR)
                     box = robot.tracker.selected
@@ -123,6 +148,13 @@ def run(config: Config, *, hardware: bool, preview: bool = False,
                         cv2.rectangle(display, (int(box.x), int(box.y)),
                                       (int(box.x + box.width), int(box.y + box.height)),
                                       (0, 255, 0), 2)
+                    face = robot.face_tracker.selected
+                    if face:
+                        cv2.rectangle(display, (int(face.x), int(face.y)),
+                                      (int(face.x + face.width), int(face.y + face.height)),
+                                      (255, 180, 0), 2)
+                    cv2.drawMarker(display, (config.width // 2, config.height // 2),
+                                   (0, 255, 255), cv2.MARKER_CROSS, 18, 1)
                     cv2.imshow("DeskBot (q to quit)", display)
                     if cv2.waitKey(1) & 0xFF == ord("q"):
                         break

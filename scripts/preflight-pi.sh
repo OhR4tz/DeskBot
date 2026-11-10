@@ -15,7 +15,8 @@ from importlib.util import find_spec
 from deskbot.config import load
 
 config = load('configs/deskbot.toml')
-for label, path in [('IMX500 model', config.model), ('hand model', config.hand_model)]:
+for label, path in [('IMX500 model', config.model), ('hand model', config.hand_model),
+                    ('face model', config.face_model)]:
     if not Path(path).is_file():
         raise SystemExit(f'Missing {label}: {path}')
 for label, module in [('Picamera2', 'picamera2'), ('MediaPipe', 'mediapipe'),

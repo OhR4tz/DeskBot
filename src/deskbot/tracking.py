@@ -35,11 +35,18 @@ class Detection:
 
 
 class TargetTracker:
-    def __init__(self, config: Config) -> None:
+    def __init__(self, config: Config, aim_fraction: float = 0.28) -> None:
         self.config = config
+        self.aim_fraction = aim_fraction
         self.selected: Box | None = None
         self.last_seen = float("-inf")
         self.smoothed: tuple[float, float] | None = None
+        self.last_aim: float | None = None
+        self.velocity = (0.0, 0.0)
+
+    def reset_motion(self) -> None:
+        self.last_aim = None
+        self.velocity = (0.0, 0.0)
 
     def select(self, detections: list[Detection] | None, now: float) -> Box | None:
         # None means no new inference. Never reuse it beyond the stale timeout.
@@ -69,27 +76,35 @@ class TargetTracker:
                 return self.selected
         self.selected = chosen.box
         self.last_seen = now
-        bx, by = chosen.box.center
+        bx = chosen.box.center[0]
+        by = chosen.box.y + self.aim_fraction * chosen.box.height
         if self.smoothed is None:
             self.smoothed = (bx, by)
         else:
-            self.smoothed = (0.65 * self.smoothed[0] + 0.35 * bx,
-                             0.65 * self.smoothed[1] + 0.35 * by)
+            # Damp detector noise, but avoid dragging old coordinates behind a
+            # moving face (or behind the camera's own movement).
+            self.smoothed = tuple(old + (0.75 if abs(new - old) > 10 else 0.2) * (new - old)
+                                  for old, new in zip(self.smoothed, (bx, by)))
         return self.selected
 
-    def aim(self, current: Pose) -> Pose:
+    def aim(self, current: Pose, now: float | None = None) -> Pose:
         if self.smoothed is None:
             return current
-        # Aim at upper body/head region, since the IMX500 model gives person boxes.
-        x = self.smoothed[0]
-        y = self.selected.y + 0.28 * self.selected.height if self.selected else self.smoothed[1]
+        x, y = self.smoothed
         ex = (x - self.config.width / 2) / (self.config.width / 2)
         ey = (y - self.config.height / 2) / (self.config.height / 2)
-        if abs(ex) < self.config.deadband:
-            ex = 0
-        if abs(ey) < self.config.deadband:
-            ey = 0
+        # A continuous deadband avoids a sudden correction at its boundary.
+        ex = math.copysign(max(0.0, abs(ex) - self.config.deadband), ex)
+        ey = math.copysign(max(0.0, abs(ey) - self.config.deadband), ey)
+        dt = 1 / self.config.fps if now is None or self.last_aim is None else min(0.25, max(0.0, now - self.last_aim))
+        self.last_aim = now
+        wanted = (-ex * self.config.pan_gain * 100, -ey * self.config.tilt_gain * 100)
+        # Ease changes in tracking velocity; gesture motion has its own owner.
+        ramp = 120 * dt
+        self.velocity = tuple(old + max(-ramp, min(ramp, max(-self.config.max_speed,
+                              min(self.config.max_speed, new)) - old))
+                              for old, new in zip(self.velocity, wanted))
         # Calibrated world +pan points left, +tilt points up.
         # The unmirrored camera's image +x points right and +y points down.
-        return Pose(self.config.pan.clamp(current.pan - ex * self.config.pan_gain * 10),
-                    self.config.tilt.clamp(current.tilt - ey * self.config.tilt_gain * 10))
+        return Pose(self.config.pan.clamp(current.pan + self.velocity[0] * dt),
+                    self.config.tilt.clamp(current.tilt + self.velocity[1] * dt))

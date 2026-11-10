@@ -35,4 +35,11 @@ if [[ ! -s "$model_path" ]]; then
   mv "${model_path}.download" "$model_path"
 fi
 
+face_path="models/blaze_face_short_range.tflite"
+face_url="https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite"
+if [[ ! -s "$face_path" ]]; then
+  curl --fail --location --retry 3 "$face_url" --output "${face_path}.download"
+  mv "${face_path}.download" "$face_path"
+fi
+
 echo "Installed. Reboot if firmware/I2C was just enabled, then run scripts/preflight-pi.sh."

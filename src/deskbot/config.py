@@ -52,6 +52,7 @@ class Config:
     calibrated: bool
     model: str
     hand_model: str
+    face_model: str = "models/blaze_face_short_range.tflite"
     width: int = 640
     height: int = 480
     fps: int = 10
@@ -88,14 +89,14 @@ class Config:
             raise ValueError("motion speed/gain exceeds conservative limit")
         if self.gesture_frames < 2 or self.gesture_frames > 15:
             raise ValueError("gesture_frames must be 2..15")
-        if not self.model or not self.hand_model:
+        if not self.model or not self.hand_model or not self.face_model:
             raise ValueError("model paths cannot be empty")
 
 
 def load(path: str | Path) -> Config:
     with open(path, "rb") as stream:
         data = tomllib.load(stream)
-    allowed_top = {"calibrated", "model", "hand_model", "width", "height", "fps", "max_hands",
+    allowed_top = {"calibrated", "model", "hand_model", "face_model", "width", "height", "fps", "max_hands",
                    "person_threshold", "deadband", "pan_gain", "tilt_gain", "max_speed",
                    "inference_timeout", "lost_timeout", "gesture_frames", "gesture_cooldown",
                    "pan", "tilt"}
@@ -131,6 +132,7 @@ def save(path: str | Path, config: Config) -> None:
         f"calibrated = {str(config.calibrated).lower()}",
         f"model = {json.dumps(config.model)}",
         f"hand_model = {json.dumps(config.hand_model)}",
+        f"face_model = {json.dumps(config.face_model)}",
     ]
     for key in ("width", "height", "fps", "max_hands", "person_threshold", "deadband", "pan_gain",
                 "tilt_gain", "max_speed", "inference_timeout", "lost_timeout",

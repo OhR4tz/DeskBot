@@ -1,14 +1,16 @@
 # How DeskBot works
 
-## One camera, two inference paths
+## One camera, three inference paths
 
-The AI Camera's IMX500 runs the packaged SSD MobileNet person detector. Picamera2 supplies that inference metadata and the corresponding RGB image from the **same head-mounted camera**. MediaPipe Hand Landmarker runs on the Pi CPU in `VIDEO` mode using that image. No second camera or cloud inference service is used at runtime.
+The AI Camera's IMX500 runs the packaged SSD MobileNet person detector. Picamera2 supplies that inference metadata and the corresponding RGB image from the **same head-mounted camera**. MediaPipe Face Detector and Hand Landmarker run on the Pi CPU in `VIDEO` mode using that image and a shared monotonically increasing frame timestamp. The installer downloads the BlazeFace short-range face model as well as the hand model. No second camera or cloud inference service is used at runtime.
 
-The default 640 × 480 stream requests a maximum of 10 FPS, limited further by the camera model's inference rate. Actual throughput depends on the Pi and CPU hand inference. Four camera buffers and one detected hand are the initial 2 GB settings; either hand can be recognized. `max_hands = 2` is optional after measuring resource use.
+The default 640 × 480 stream requests 10 FPS; the tuned robot profile requests 20 FPS. CPU face/hand updates use camera frames independently of the IMX500 person model's inference cadence. Actual throughput depends on the Pi and CPU inference. Four camera buffers and one detected hand are the initial 2 GB settings; either hand can be recognized. `max_hands = 2` is optional after measuring resource use.
 
 ## Tracking and reactions
 
-The tracker initially favors a large, confident person detection, then prefers a nearby continuation of that box. It aims at the upper portion of the person box, with smoothing and an image deadband. It does not recognize an owner, identify faces, or precisely localize a face. With several people present, it can choose or eventually switch to someone else.
+The person tracker initially favors a large, confident detection, then prefers a nearby continuation of that box. A separate face tracker aims at the center of a detected face, preferring faces inside the selected person's region. Face tracking can continue when a close view contains a face without a person detection. It holds briefly across missing faces, then falls back to the upper portion of the person box. Face detection locates a face; it does not recognize an owner or identify a person. With several people present, it can choose or eventually switch to someone else.
+
+Both aim coordinates use an adaptive filter: larger changes receive weight 0.75 to reduce following delay, while changes within 10 pixels receive weight 0.2 to damp jitter. Corrections use elapsed time, a continuous small center deadband, and a 120°/s² limit on changes in tracking velocity. This eases direction changes while continuing to correct visible centering errors. Gesture motion bypasses the tracking velocity ramp and remains subject to the shared servo speed and travel limits. Status includes measured `fps`, `face`, `aim`, and face-center pixel error; preview draws the face box and frame center.
 
 Missing or stale results stop fresh tracking corrections and eventually discard the target. Target loss does not start an aggressive search sweep. Hands are associated with the selected person's image region; overlapping people or hands can still confuse that spatial association.
 
@@ -37,7 +39,7 @@ Default `configs/deskbot.toml` settings include:
 | --- | --- |
 | `calibrated = false` | Blocks hardware `run` until physical calibration is completed. |
 | `[pan]`, `[tilt]` | Center, direction, checked world bounds, and pulse mapping. |
-| `model`, `hand_model` | IMX500 SSD `.rpk` and downloaded MediaPipe `.task` paths. |
+| `model`, `hand_model`, `face_model` | IMX500 SSD `.rpk`, downloaded hand `.task`, and face `.tflite` paths. |
 | `person_threshold = 0.55` | Minimum person score. |
 | `deadband = 0.065` | Ignore small normalized image-center errors. |
 | `pan_gain`, `tilt_gain` | Tracking correction strength. |
@@ -77,7 +79,7 @@ python -m unittest discover -s tests -v
 deskbot simulate
 ```
 
-The current 29-test hardware-free suite includes tracking direction, full downward travel and hold at reduced frame rates, and reaction completion after target loss. Initial Windows development checks used Python 3.13.11 and also covered simulation and Python compilation. A blank-image API smoke check passed with MediaPipe 1.2.2, NumPy 2.3.5, and the official hand model; the package build and Bash syntax were also checked.
+The current 35-test hardware-free suite includes face priority and centering direction, stale face rejection, face/person association, vertical smoothing and velocity easing, center jitter rejection, gesture ownership, full downward travel and hold at reduced frame rates, and reaction completion after target loss. Initial Windows development checks used Python 3.13.11 and also covered simulation and Python compilation. A blank-image API smoke check passed with MediaPipe 1.2.2, NumPy 2.3.5, and the official hand model; the package build and Bash syntax were also checked.
 
 The `pi` extra includes Adafruit CRICKIT and, specifically on Linux/aarch64, `Adafruit-Blinka-Raspberry-Pi-PWM>=1.0.2`, which supplies the native PWM dependency required by the current Blinka stack. The installer also adds MediaPipe and OS-managed Picamera2, OpenCV, IMX500 support, and camera models. Models are installed/downloaded separately.
 
@@ -105,6 +107,8 @@ After the CRICKIT barrel supply was connected, the board responded at I2C addres
 
 In recovery, both servos were electrically centered unloaded and their horns re-indexed. On 2026-11-09, the operator confirmed straight-ahead pan center 97°, level tilt center 83°, both directions +1, pan −70°/+70°, tilt −30°/+40°, and clearance at all four combined corners. Pulse limits remain 750–2250 microseconds. The calibration tool visited both endpoints of both axes and saved `calibrated = true` after the operator's confirmation. These values apply to this assembled robot, not to another horn indexing or cable routing.
 
-A 90-second motor-enabled trial followed that calibration. The operator confirmed correct tracking direction, and the log recorded both `middle_finger` and `rock_on` reactions. The timed run stopped automatically; the health check reported 51°C and `throttled=0x0`. The operator requested quicker movement and a more pronounced downward reaction. The updated robot profile uses `pan_gain = 0.5`, `tilt_gain = 0.35`, and `max_speed = 60.0`, while preserving the checked travel limits. Shipped defaults remain conservative; the faster profile needs operator assessment during its next trial.
+A 90-second motor-enabled trial followed that calibration. The operator confirmed correct tracking direction, and the log recorded both `middle_finger` and `rock_on` reactions. The timed run stopped automatically; the health check reported 51°C and `throttled=0x0`. After feedback about twitching and lag, face centering gained adaptive smoothing, tracking velocity easing, and a 20 FPS camera target. The operator reported smoother movement but requested stronger following. The latest profile uses `pan_gain = 1.0`, `tilt_gain = 0.8`, `deadband = 0.025`, `fps = 20`, and `max_speed = 60.0`, preserving the checked travel limits. Shipped defaults remain conservative; the latest strength adjustment needs operator assessment. Runtime status measured approximately 10–20 FPS during the preceding 20 FPS trial, depending on inference workload.
+
+A camera-only check with person, face, and hand inference enabled captured 150 frames in 15.00 seconds (10 FPS), with face detections in all 150 frames and peak process resident memory of 249.7 MiB. This is a short sample, not a sustained performance guarantee. Face integration follows the [MediaPipe Face Detector documentation](https://developers.google.com/edge/mediapipe/solutions/vision/face_detector?tab=Python).
 
 Implementation references: [Raspberry Pi AI Camera](https://www.raspberrypi.com/documentation/accessories/ai-camera.html), [official IMX500 object-detection example](https://github.com/raspberrypi/picamera2-examples/blob/main/examples/imx500/imx500_object_detection_demo.py), [MediaPipe Hand Landmarker](https://developers.google.com/edge/mediapipe/solutions/vision/hand_landmarker), and [MediaPipe Python setup](https://developers.google.com/edge/mediapipe/solutions/setup_python). The target OS comes from [Raspberry Pi OS](https://www.raspberrypi.com/software/operating-systems/).
