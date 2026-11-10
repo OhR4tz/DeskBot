@@ -11,7 +11,7 @@ Start here:
 3. [Understand the code, settings, and limitations](docs/architecture.md).
 4. [Read the supplied mechanical model notes](mechanical/README.md).
 
-The initial configuration is **uncalibrated**, with narrow pan ±10° and tilt ±5° bounds. `observe` uses no servo hardware, and `run` simulates servo writes unless `--enable-servos` is explicitly supplied. Hardware running also requires a completed calibration. Pan is intended to reach ±55° where safe; the user-requested configurable tilt ceiling is now ±60°. Both axes accept at most ±60°, but the actual safe range must be established progressively on the assembled robot.
+The initial configuration is **uncalibrated**, with narrow pan ±10° and tilt ±5° bounds. `observe` uses no servo hardware, and `run` simulates servo writes unless `--enable-servos` is explicitly supplied. Hardware running also requires a completed calibration. Configurable ceilings are pan ±70° and tilt ±60°, with servo angles constrained to 0–180°. The actual safe range must be established progressively on the assembled robot.
 
 Before assembled calibration, use the [detached centering workflow](docs/calibration.md#before-the-first-attachment) for each servo with unknown neutral. `center-servo pan` or `center-servo tilt` commands only that unloaded axis after an explicit confirmation. Pointing an unpowered head forward does not establish electrical zero.
 

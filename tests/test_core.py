@@ -68,6 +68,11 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             replace(config(), tilt=Axis(90, 0, -15, 15)).validate()
         replace(config(), tilt=Axis(90, -1, -60, 60)).validate()
+        replace(config(), pan=Axis(97, 1, -70, 70)).validate()
+        with self.assertRaises(ValueError):
+            replace(config(), pan=Axis(97, 1, -70, 71)).validate()
+        with self.assertRaises(ValueError):
+            replace(config(), pan=Axis(111, 1, -70, 70)).validate()
         with self.assertRaises(ValueError):
             replace(config(), tilt=Axis(90, -1, -61, 60)).validate()
         with self.assertRaises(ValueError):

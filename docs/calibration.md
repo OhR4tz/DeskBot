@@ -2,7 +2,7 @@
 
 Calibrate the complete assembly with its camera, ribbon, lid, and servo leads in place. The supplied 3MF is a static assembly and does not establish a safe moving range. Start with the shipped bounds, pan ±10° and tilt ±5°. Pan is intended to reach ±55° (adjustable around ±50–60° if physically safe). The user-requested configurable tilt ceiling is now ±60°; approach any larger tilt range progressively.
 
-Software enforces a hard envelope of ±60° for both axes. Those are maximum accepted settings, **not evidence that the mechanism clears them**. Leave smaller limits wherever the real assembly needs them. The narrow shipped defaults, 2° maximum jog, 5° maximum range-end edit, and slew limit are unchanged.
+Software enforces configurable ceilings of ±70° for pan and ±60° for tilt, while retaining the servo angle check of 0–180°. Those are maximum accepted settings, **not evidence that the mechanism clears them**. Leave smaller limits wherever the real assembly needs them. The narrow shipped defaults, 2° maximum jog, 5° maximum range-end edit, and slew limit are unchanged.
 
 ## Before the first attachment
 
