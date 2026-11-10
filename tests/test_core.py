@@ -67,6 +67,9 @@ class ConfigTests(unittest.TestCase):
             replace(config(), max_speed=200).validate()
         with self.assertRaises(ValueError):
             replace(config(), tilt=Axis(90, 0, -15, 15)).validate()
+        replace(config(), tilt=Axis(90, -1, -60, 60)).validate()
+        with self.assertRaises(ValueError):
+            replace(config(), tilt=Axis(90, -1, -61, 60)).validate()
         with self.assertRaises(ValueError):
             replace(config(), fps=0).validate()
         with self.assertRaises(ValueError):

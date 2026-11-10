@@ -25,6 +25,8 @@ Reactions require repeated matching frames, use a global cooldown, and temporari
 
 Only `motion.py` writes servo commands. It maps world-relative pan/tilt through each axis's center and direction, clamps targets, and limits travel rate. Startup directly commands the configured centers because positional MG90S servos provide no position feedback. First electrically center each unknown servo unloaded, then index its horn with power off; see [the centering and initial-jump precautions](calibration.md#before-the-first-attachment).
 
+Both axes have a configurable ceiling of ±60°, including the user-requested tilt extension. Shipped bounds remain pan ±10° and tilt ±5°, and the existing jog, range-edit, and speed guards remain in place. Accepted bounds do not establish physical clearance.
+
 `center-servo pan|tilt` requires the exact `DETACHED` acknowledgement before hardware access and commands only that axis at its configured center (default 90°, nominally 1500 microseconds). It waits for Enter, then releases that channel in cleanup. Centering and interactive calibration also handle SIGTERM and SSH hangup through cleanup and restore the previous signal handlers. Centering performs no sweep and does not arm calibration. It cannot verify that the linkage was actually detached.
 
 Default `configs/deskbot.toml` settings include:
@@ -99,6 +101,6 @@ A separate 55-second real-camera trial classified `middle_finger` in 192 frames 
 
 After the CRICKIT barrel supply was connected, the board responded at I2C address `0x49`. The first assembled center attempt caused a large unexpected rightward pan and cable binding; barrel power was cut and calibration stopped. That movement does not establish a software offset or a safe travel range.
 
-In recovery, pan was mechanically unloaded and `center-servo pan` commanded port 1 only. The servo settled with the head stationary, as confirmed by the operator, then was released and powered off for horn re-indexing. Tilt alignment, assembled calibration, physical tracking/reaction motion, and clearance remain unvalidated.
+In recovery, pan was mechanically unloaded and `center-servo pan` commanded port 1 only. The servo settled with the head stationary, as confirmed by the operator, then was released and powered off for horn re-indexing. A robot-specific tilt level baseline was later saved with calibration still disarmed; that baseline does not establish full-range clearance. Assembled calibration, physical tracking/reaction motion, and clearance remain unvalidated.
 
 Implementation references: [Raspberry Pi AI Camera](https://www.raspberrypi.com/documentation/accessories/ai-camera.html), [official IMX500 object-detection example](https://github.com/raspberrypi/picamera2-examples/blob/main/examples/imx500/imx500_object_detection_demo.py), [MediaPipe Hand Landmarker](https://developers.google.com/edge/mediapipe/solutions/vision/hand_landmarker), and [MediaPipe Python setup](https://developers.google.com/edge/mediapipe/solutions/setup_python). The target OS comes from [Raspberry Pi OS](https://www.raspberrypi.com/software/operating-systems/).

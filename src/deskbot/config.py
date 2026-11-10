@@ -26,7 +26,7 @@ class Axis:
             raise ValueError(f"{name}: direction must be -1 or 1")
         if not (self.minimum < 0 < self.maximum):
             raise ValueError(f"{name}: range must straddle zero")
-        envelope = 60 if name == "pan" else 15
+        envelope = 60
         if self.minimum < -envelope or self.maximum > envelope:
             raise ValueError(f"{name}: range exceeds mechanical +/-{envelope} degree envelope")
         servo_ends = (self.center + self.direction * self.minimum,

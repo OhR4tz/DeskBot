@@ -1,8 +1,8 @@
 # Calibrate the assembled head
 
-Calibrate the complete assembly with its camera, ribbon, lid, and servo leads in place. The supplied 3MF is a static assembly and does not establish a safe moving range. Start with the shipped bounds, pan ±10° and tilt ±5°. The intended eventual range is pan ±55° (adjustable around ±50–60° if physically safe) and tilt ±15°.
+Calibrate the complete assembly with its camera, ribbon, lid, and servo leads in place. The supplied 3MF is a static assembly and does not establish a safe moving range. Start with the shipped bounds, pan ±10° and tilt ±5°. Pan is intended to reach ±55° (adjustable around ±50–60° if physically safe). The user-requested configurable tilt ceiling is now ±60°; approach any larger tilt range progressively.
 
-Software enforces a hard envelope of pan ±60° and tilt ±15°. Those are maximum accepted settings, **not evidence that the mechanism clears them**. Leave smaller limits wherever the real assembly needs them.
+Software enforces a hard envelope of ±60° for both axes. Those are maximum accepted settings, **not evidence that the mechanism clears them**. Leave smaller limits wherever the real assembly needs them. The narrow shipped defaults, 2° maximum jog, 5° maximum range-end edit, and slew limit are unchanged.
 
 ## Before the first attachment
 
@@ -77,14 +77,14 @@ Pulse widths (`pulse_min` and `pulse_max`, initially 750 and 2250 microseconds) 
 
 Begin by approaching both ends of the initial pan range with repeated small jogs while tilt is neutral. Inspect the entire path, not only the endpoint. Return to neutral and do the same for tilt. Use the camera/ribbon's actual installed position when checking.
 
-To grow pan toward ±55°, the practical range stages are **±10 → ±15 → ±20 → ±25 → ±30 → ±35 → ±40 → ±45 → ±50 → ±55**. For tilt they are **±5 → ±10 → ±15**. At each stage:
+To grow pan toward ±55°, the practical range stages are **±10 → ±15 → ±20 → ±25 → ±30 → ±35 → ±40 → ±45 → ±50 → ±55**. Tilt starts **±5 → ±10 → ±15** and may continue in checked increments of at most 5° per range end, up to the ±60° ceiling. Requested 15° test milestones must still be approached through these range edits and 1–2° jogs; the interactive tool does not accept a 15° jog. At each stage:
 
 1. Check that the next small expansion appears clear with the head supported and cables free.
 2. At the prompt, change only that stage's bounds, for example `range pan -15 15` after checking the current ±10° path.
 3. Approach each newly allowed end in 1–2° jogs, stopping immediately if clearance becomes uncertain. For an odd endpoint such as 15°, the last jog may be 1°.
 4. Return through the checked path to neutral before the next expansion. Do not paste a sequence that automatically traverses multiple stages.
 
-Check combined poses too: clearance at pan +55° with tilt at zero does not establish clearance at pan +55° with tilt +15° or -15°. Slowly approach all four corners of your chosen final range with the same small jogs, checking ribbon slack, the lid opening, servo leads, and body/head contact along each path. Choose smaller or asymmetric limits if needed. When contracting a range, first return the current pose inside the proposed bounds; each range edit is still limited to 5° per end.
+Check combined poses too: clearance at a pan endpoint with tilt at zero does not establish clearance at that pan position with tilt at either chosen endpoint. Slowly approach all four corners of your chosen final range with the same small jogs, checking ribbon slack, the lid opening, servo leads, and body/head contact along each path. Choose smaller or asymmetric limits if needed. When contracting a range, first return the current pose inside the proposed bounds; each range edit is still limited to 5° per end.
 
 ## Save and explicitly arm
 

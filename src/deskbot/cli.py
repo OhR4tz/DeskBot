@@ -80,7 +80,8 @@ def calibrate(path: Path, config: Config) -> None:
     print("Disconnect both supplies before mechanical adjustments; never force gears.")
     print("Attaching commands the configured center; disconnect power if it binds.")
     print("Start at narrow bounds, jog in <=2 degree steps, then expand ranges gradually.")
-    print("Goal after clearance checks: pan -55..55, tilt -15..15 world degrees.")
+    print(f"Configured bounds needing physical clearance checks: pan {config.pan.minimum:g}..{config.pan.maximum:g}, "
+          f"tilt {config.tilt.minimum:g}..{config.tilt.maximum:g} world degrees.")
     if input("Type ATTACH to energize both servos: ").strip() != "ATTACH":
         return
     from .motion import CrickitServos
