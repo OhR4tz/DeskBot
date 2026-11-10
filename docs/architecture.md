@@ -18,10 +18,12 @@ The gesture classifier uses aspect-corrected 3D finger angles and palm-normalize
 
 | Pose | Intended reaction |
 | --- | --- |
-| Rock on: index and little finger extended, middle/ring curled, thumb folded | About 1.5 seconds of nodding and small pan wiggles. |
+| Rock on: index and little finger extended, middle/ring curled, thumb folded | Three tilt-only nods with 15° strokes, returning to the triggering pose after each nod. The first stroke reverses near the lower limit. |
+| Thumbs-down: four fingers curled, thumb straight and pointing down in the image | The original rock-on routine: about 1.5 seconds of small happy nods and pan wiggles. |
+| Thumbs-up: four fingers curled, thumb straight and pointing up in the image | One elliptical head circle, up to 24° wide and 20° tall, then return to the triggering pose. The circle shifts inward near limits, retaining a margin. |
 | Raised middle finger: middle extended, index/ring/little curled, thumb unrestricted | Move to the configured downward tilt limit, hold for 0.8 seconds after commanded arrival, then return to the triggering pose before tracking resumes. |
 
-Reactions require repeated matching frames, use a global cooldown, and temporarily own motion before tracking resumes. Release the pose to rearm. The heuristic thresholds need actual hand, viewpoint, distance, and lighting tests. The “I love you” pose with an extended thumb is intended to be rejected as rock on. Status uses `rock_on` and `middle_finger` for the two reactions.
+Reactions require repeated matching frames, use a global cooldown, and temporarily own motion before tracking resumes. Release the pose to rearm. The heuristic thresholds need actual hand, viewpoint, distance, and lighting tests. The “I love you” pose with an extended thumb is intended to be rejected as rock on. Status uses `rock_on`, `thumbs_down`, `thumbs_up`, and `middle_finger`. All four gestures reuse the same hand landmarks; no additional model is needed. Nod and circle waypoints wait for commanded arrival before advancing, so slow frame rates do not skip the strokes.
 
 The downward reaction waits for the slew-limited commanded pose before starting its hold and return. This is command progress, not measured servo position: MG90S servos provide no feedback. A reaction already underway finishes even if looking away temporarily loses the person detection.
 
@@ -79,7 +81,7 @@ python -m unittest discover -s tests -v
 deskbot simulate
 ```
 
-The current 35-test hardware-free suite includes face priority and centering direction, stale face rejection, face/person association, vertical smoothing and velocity easing, center jitter rejection, gesture ownership, full downward travel and hold at reduced frame rates, and reaction completion after target loss. Initial Windows development checks used Python 3.13.11 and also covered simulation and Python compilation. A blank-image API smoke check passed with MediaPipe 1.2.2, NumPy 2.3.5, and the official hand model; the package build and Bash syntax were also checked.
+The current 40-test hardware-free suite includes face priority and centering direction, stale face rejection, face/person association, vertical smoothing and velocity easing, center jitter rejection, gesture ownership, full downward travel and hold at reduced frame rates, and reaction completion after target loss. It also checks mirrored/scaled thumbs-up/down landmarks, three completed tilt-only nods, circles near travel limits, preservation of the original wiggle routine, and held-pose debounce. Initial Windows development checks used Python 3.13.11 and also covered simulation and Python compilation. A blank-image API smoke check passed with MediaPipe 1.2.2, NumPy 2.3.5, and the official hand model; the package build and Bash syntax were also checked.
 
 The `pi` extra includes Adafruit CRICKIT and, specifically on Linux/aarch64, `Adafruit-Blinka-Raspberry-Pi-PWM>=1.0.2`, which supplies the native PWM dependency required by the current Blinka stack. The installer also adds MediaPipe and OS-managed Picamera2, OpenCV, IMX500 support, and camera models. Models are installed/downloaded separately.
 

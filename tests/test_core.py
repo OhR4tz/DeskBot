@@ -34,7 +34,7 @@ def hand_pose(kind):
         xy[i] = value
     if kind in ('love', 'old_gun', 'middle_thumb_out', 'open'):
         xy[4] = (.18,.48)
-    if kind in ('middle', 'middle_thumb_out', 'fist'):
+    if kind in ('middle', 'middle_thumb_out', 'fist', 'thumbs_up', 'thumbs_down', 'thumb_side', 'thumb_bent'):
         xy[7], xy[8] = (.44,.49), (.44,.59)
         xy[18], xy[19], xy[20] = (.66,.47), (.66,.56), (.64,.64)
     if kind in ('middle', 'middle_thumb_out'):
@@ -45,6 +45,14 @@ def hand_pose(kind):
         xy[18], xy[19], xy[20] = (.66,.47), (.66,.56), (.64,.64)
     if kind == 'index_only':
         xy[18], xy[19], xy[20] = (.66,.47), (.66,.56), (.64,.64)
+    if kind in ('thumbs_up', 'thumbs_down', 'thumb_side', 'thumb_bent'):
+        xy[2] = (.30, .60)
+        step = -.20 if kind == 'thumbs_up' else .20
+        xy[3], xy[4] = (.30, .60 + step), (.30, .60 + 2 * step)
+        if kind == 'thumb_side':
+            xy[3], xy[4] = (.10, .60), (-.10, .60)
+        elif kind == 'thumb_bent':
+            xy[4] = (.48, .80)
     if kind == 'peace':
         xy[10], xy[11], xy[12] = (.49,.40), (.49,.26), (.49,.12)
         xy[18], xy[19], xy[20] = (.66,.47), (.66,.56), (.64,.64)
@@ -326,6 +334,21 @@ class TrackerTests(unittest.TestCase):
 
 
 class GestureTests(unittest.TestCase):
+    def test_thumbs_up_and_down_require_curled_fingers_and_vertical_extended_thumb(self):
+        for kind in ('thumbs_up', 'thumbs_down'):
+            for size in (.6, 1.0, 1.3):
+                with self.subTest(kind=kind, size=size):
+                    hand = [Point(.5 + (p.x - .5) * size, .5 + (p.y - .5) * size, p.z * size)
+                            for p in hand_pose(kind)]
+                    self.assertEqual(classify(hand), kind)
+                    self.assertEqual(classify([Point(1-p.x, p.y, p.z) for p in hand]), kind)
+            hand = hand_pose(kind)
+            rock = hand_pose('rock')
+            hand[6:9] = rock[6:9]
+            self.assertIsNone(classify(hand))
+        for kind in ('fist', 'thumb_side', 'thumb_bent'):
+            self.assertIsNone(classify(hand_pose(kind)))
+
     def test_rock_on_and_middle_finger_geometry(self):
         self.assertEqual(classify(hand_pose('rock')), 'rock_on')
         self.assertEqual(classify(hand_pose('middle')), 'middle_finger')
@@ -363,6 +386,72 @@ class GestureTests(unittest.TestCase):
 
 
 class IntegrationTests(unittest.TestCase):
+    def test_rock_on_completes_three_pure_nods_even_at_tilt_limits(self):
+        cfg = replace(config(), tilt=Axis(83, 1, -30, 40), max_speed=60)
+        for tilt in (-30, 0, 40):
+            with self.subTest(tilt=tilt):
+                origin = Pose(20, tilt)
+                behavior = Behavior(cfg)
+                behavior.trigger('rock_on', 0, origin)
+                points = [point for _, point in behavior.path]
+                self.assertEqual(len(points), 6)
+                self.assertEqual(points[1::2], [origin] * 3)
+                self.assertTrue(all(p.pan == origin.pan for p in points))
+                self.assertTrue(all(abs(points[i].tilt - tilt) == 15 for i in (0, 2, 4)))
+                motion = Motion(cfg, FakeServos())
+                motion.start()
+                motion.pose = origin
+                for step in range(400):
+                    goal = behavior.pose(step / 20, origin, motion.pose)
+                    motion.step(goal, .05)
+                    if behavior.kind is None:
+                        break
+                self.assertIsNone(behavior.kind)
+                self.assertEqual(behavior.path_index, 6)
+                self.assertEqual(motion.pose, origin)
+
+    def test_thumbs_up_circle_stays_inside_limits_and_returns_to_origin(self):
+        cfg = replace(config(), pan=Axis(97, 1, -70, 70), tilt=Axis(83, 1, -30, 40), max_speed=60)
+        for origin in (Pose(), Pose(70, 40), Pose(-70, -30)):
+            with self.subTest(origin=origin):
+                behavior = Behavior(cfg)
+                behavior.trigger('thumbs_up', 0, origin)
+                points = [p for _, p in behavior.path[:-1]]
+                self.assertAlmostEqual(max(p.pan for p in points) - min(p.pan for p in points), 24)
+                self.assertAlmostEqual(max(p.tilt for p in points) - min(p.tilt for p in points), 20)
+                self.assertTrue(all(-68 <= p.pan <= 68 and -28 <= p.tilt <= 38 for p in points))
+                motion = Motion(cfg, FakeServos())
+                motion.start()
+                motion.pose = origin
+                for step in range(500):
+                    motion.step(behavior.pose(step / 20, origin, motion.pose), .05)
+                    if behavior.kind is None:
+                        break
+                self.assertIsNone(behavior.kind)
+                self.assertEqual(motion.pose, origin)
+
+    def test_thumbs_down_preserves_the_old_rock_on_routine(self):
+        cfg = config()
+        behavior = Behavior(cfg)
+        behavior.trigger('thumbs_down', 0, Pose())
+        for now, expected in ((.1, Pose(0, 5)), (.3, Pose(5, -3)),
+                              (.6, Pose(-5, 5)), (.9, Pose(5, -3)),
+                              (1.1, Pose(-5, 4)), (1.3, Pose())):
+            self.assertEqual(behavior.pose(now, Pose()), expected)
+        self.assertEqual(behavior.pose(1.6, Pose(10, 10)), Pose(10, 10))
+        self.assertIsNone(behavior.kind)
+
+    def test_new_thumb_gestures_trigger_once_while_held(self):
+        for kind in ('thumbs_down', 'thumbs_up'):
+            with self.subTest(kind=kind):
+                robot = Robot(config())
+                frame = Frame(None, [Detection(Box(100, 0, 500, 480), .9)], [hand_pose(kind)])
+                for now in (0, .1, .2):
+                    robot.process(frame, now)
+                self.assertEqual(robot.behavior.kind, kind)
+                robot.process(frame, .5)
+                self.assertAlmostEqual(robot.last_reaction, .2)
+
     def test_face_center_overrides_opposite_person_box_aim(self):
         cfg = replace(config(), deadband=0.025)
         robot = Robot(cfg)
@@ -485,7 +574,10 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(robot.behavior.kind, 'rock_on')
         robot.process(frame, .4)
         self.assertNotEqual(motion.pose, Pose())
-        robot.process(Frame(None, [], []), 2.0)
+        for step in range(5, 71):
+            robot.process(Frame(None, [], []), step / 10)
+            if robot.behavior.kind is None:
+                break
         self.assertIsNone(robot.behavior.kind)
         self.assertTrue(all(35 <= pan <= 145 and 75 <= tilt <= 105 for pan, tilt in backend.angles))
 
@@ -534,6 +626,8 @@ class IntegrationTests(unittest.TestCase):
         person = [Detection(Box(0, 0, 640, 480), .9)]
         for t in (0, .1, .2, 1.8):
             robot.process(Frame(None, person, [hand]), t)
+        # Isolate shared cooldown from the longer nod animation's busy guard.
+        robot.behavior.kind = None
         for t in (1.9, 2.0, 2.1):
             robot.process(Frame(None, person, [shifted]), t)
         self.assertAlmostEqual(robot.last_reaction, .2)

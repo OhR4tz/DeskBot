@@ -1,4 +1,4 @@
-"""Conservative landmark geometry for two deliberate hand poses."""
+"""Conservative landmark geometry for deliberate hand poses."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -46,6 +46,13 @@ def classify(hand: Sequence[Point], aspect: float = 0.75) -> str | None:
         return "rock_on"
     if curled[0] and straight[1] and curled[2] and curled[3]:
         return "middle_finger"
+    if all(curled) and _angle(hand[2], hand[3], hand[4], aspect) >= 150:
+        dx = hand[4].x - hand[2].x
+        dy = (hand[4].y - hand[2].y) * aspect
+        thumb_extended = (_distance(hand[2], hand[4], aspect) >= 0.75 * palm and
+                          _distance(hand[4], hand[9], aspect) >= palm)
+        if thumb_extended and abs(dy) >= 0.7 * palm and abs(dy) > abs(dx):
+            return "thumbs_down" if dy > 0 else "thumbs_up"
     return None
 
 
