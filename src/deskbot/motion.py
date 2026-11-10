@@ -52,6 +52,30 @@ class CrickitServos:
             raise first_error
 
 
+class CrickitSingleServo:
+    """Center one mechanically unloaded servo without touching the other port."""
+
+    def __init__(self, config: Config, name: str) -> None:
+        if name not in ("pan", "tilt"):
+            raise ValueError("axis must be pan or tilt")
+        from adafruit_crickit import crickit
+        self.axis = getattr(config, name)
+        self.servo = crickit.servo_1 if name == "pan" else crickit.servo_2
+        try:
+            self.servo.actuation_range = 180
+            self.servo.set_pulse_width_range(min_pulse=self.axis.pulse_min,
+                                             max_pulse=self.axis.pulse_max)
+        except BaseException:
+            self.servo.angle = None
+            raise
+
+    def center(self) -> None:
+        self.servo.angle = self.axis.servo_angle(0)
+
+    def close(self) -> None:
+        self.servo.angle = None
+
+
 class Motion:
     def __init__(self, config: Config, servos: FakeServos | CrickitServos) -> None:
         self.config = config
@@ -60,7 +84,7 @@ class Motion:
         self.started = False
 
     def start(self) -> None:
-        # The operator must have manually placed the head near neutral before attaching.
+        # Both horns must be reattached after unloaded electrical centering.
         self.servos.write(self.config.pan.servo_angle(0), self.config.tilt.servo_angle(0))
         self.started = True
 

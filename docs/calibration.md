@@ -6,13 +6,33 @@ Software enforces a hard envelope of pan ±60° and tilt ±15°. Those are maxim
 
 ## Before the first attachment
 
-1. Stop any DeskBot process or service. If installed, use `sudo systemctl stop deskbot`.
-2. Shut the Pi down and disconnect **both** USB-C and CRICKIT barrel supplies before checking wiring or repositioning hardware. The HAT's diode-coupled supply can keep the Pi powered when USB-C is unplugged.
-3. Check pan on CRICKIT port 1 and tilt on port 2. Support the head, free the ribbon and cables, and keep fingers away from pinch points. Both power disconnects must be within reach.
-4. Bring the unpowered assembly near its intended forward/level position only if that can be done without forcing the gears. If necessary, correct horn/linkage alignment with power off. Never force an MG90S shaft to match the software.
-5. Restore the Pi USB-C supply and reconnect over SSH. Keep the head supported when connecting the CRICKIT's 5 V / 4 A barrel supply.
+**Establish electrical center before attaching an unknown servo to the head.** Pointing an unpowered head forward does not set servo zero. The controller has no position feedback, and assembled startup directly commands each configured center. Narrow bounds and the slew limiter cannot prevent a large initial jump. Never blindly retry an assembled center command after unexpected movement or binding.
 
-**The first servo command can jump.** The controller cannot read the servo's actual position. Its startup command is the configured center, initially logical servo angle 90°, which is not guaranteed to be physical forward/level. Narrow software bounds and the slew limiter cannot prevent this initial jump. If startup cannot be made safe on the assembly, stop and correct the unpowered mechanical alignment before continuing.
+For each axis with unknown neutral, complete this unloaded centering and horn-indexing process **one axis at a time**, before `calibrate` → `ATTACH`:
+
+1. Stop DeskBot. If a service is installed, disable it for this work with `sudo systemctl disable --now deskbot` so it cannot restart during the following boots. Keep `calibrated = false` and the initial narrow bounds.
+2. Shut down the Pi and disconnect **both** USB-C and CRICKIT barrel supplies. Support the head, then detach the selected horn/linkage from the head load. Secure the unloaded servo with room for its horn to move. Pan is port 1; tilt is port 2. Never force the shaft or gears. The HAT can keep the Pi powered from its barrel supply when USB-C is unplugged.
+3. Restore Pi USB-C power, reconnect over SSH, and connect the CRICKIT's 5 V / 4 A barrel supply. Keep cables, fingers, and the unloaded horn clear, with the power disconnect accessible.
+4. Run the selected command below and type **`DETACHED`** only after confirming that axis is mechanically unloaded. Observe it settle. Press **Enter** to release the servo pulses.
+5. Shut down and disconnect **both** supplies again. Without turning the centered shaft, fit the horn onto its splines with the head pointing forward for pan, or level for tilt. Choose the closest suitable spline position; use only small software trim afterward. Refit with power off, never while the servo holds torque.
+6. If fitting the horn turns the shaft or loses its known position, detach it and repeat electrical centering. Do not push the shaft back by hand or guess a large software correction from an observed swing.
+7. Repeat the process separately for the other axis. Both unknown-neutral axes must be centered and mechanically aligned before assembled attachment.
+
+For the unloaded pan servo, at the Linux shell in the project directory:
+
+```bash
+.venv/bin/deskbot center-servo pan
+```
+
+For the separately unloaded tilt servo, use:
+
+```bash
+.venv/bin/deskbot center-servo tilt
+```
+
+`center-servo` initializes and commands only the selected servo, at its configured center: by default 90° and nominally 1500 microseconds with the shipped pulse range. The other channel is untouched. The exact `DETACHED` confirmation is required before hardware access. This command does not sweep, change configuration, or arm calibration. It releases the selected channel when Enter is pressed or the command exits, including handled termination or SSH hangup. Power remains connected until you unplug it.
+
+After both horns are aligned, restore power with the head supported and ribbon/leads free. Only then proceed to assembled calibration. The static 3MF and the lid's camera-cable clearance slot do not establish electrical neutral or safe motion.
 
 The mapping assumes approximately 1:1 servo-to-head angles. If the mechanism uses a different ratio, measured head travel must guide your limits; the configured degrees are not a physical angle measurement.
 
@@ -24,9 +44,9 @@ From the Pi's project directory:
 .venv/bin/deskbot calibrate
 ```
 
-Read the prompt, confirm the assembly is ready, and type **`ATTACH`** only when prepared for both servos to receive their center commands. A different response exits without attaching. After attachment, `show` displays the current logical pose and settings.
+Read the prompt, confirm both axes have been electrically centered and mechanically aligned, and type **`ATTACH`** only when prepared for both servos to receive their center commands. A different response exits without attaching. After attachment, `show` displays the current logical pose and settings.
 
-If anything binds, strains, buzzes persistently, heats, or pulls the ribbon, disconnect power promptly. Do not use `neutral` to force a binding head back through an obstruction. Correct the issue with both supplies off and restart with narrower limits.
+If anything binds, strains, buzzes persistently, heats, or pulls the ribbon, disconnect CRICKIT barrel power promptly. Do not use `neutral` to force a binding head back through an obstruction. Shut down and disconnect both supplies before inspecting. Resolve unknown neutral with the detached process above before retrying; narrower limits alone do not fix startup misalignment.
 
 ## Establish center and direction
 
@@ -47,11 +67,11 @@ Commands are typed at `calibrate>`, not at the Linux shell:
 
 Use `tilt` instead of `pan` for its corresponding center, direction, or range command. Jogs must be greater than zero and at most 2° in magnitude. The tool rejects jogs outside the current bounds.
 
-Use tiny jogs to check direction. Positive pan should turn toward a target to the right in the camera image; positive tilt should look upward. Return to neutral before changing `direction`. At neutral, adjust each `center` in small increments until logical zero is a suitable physical forward/level position. Center changes themselves command motion, so inspect each small change. Use power-off horn alignment if a large correction is needed.
+After horn indexing, use tiny jogs to check direction. Positive pan should turn toward a target to the right in the camera image; positive tilt should look upward. Return to neutral before changing `direction`. At neutral, use `center` only for small final trim, at most 2° per edit. Center changes themselves command motion, so inspect each small change. A large offset requires detached electrical centering and power-off horn alignment, not repeated trim commands.
 
 Changing center or direction disarms calibration and clears that axis's endpoint visits. Set them before exploring the larger range. Use `save` to keep the checked settings.
 
-Pulse widths (`pulse_min` and `pulse_max`, initially 750 and 2250 microseconds) are not adjustable live. A changed pulse mapping can change the physical center and travel. If your particular servo needs another mapping, stop DeskBot and unplug the CRICKIT barrel supply. Keep Pi USB-C power on for SSH, then use `nano configs/deskbot.toml` to edit the pulse values, set `calibrated = false`, and restore narrow bounds. With the barrel unplugged, the HAT diode prevents Pi USB-C from feeding the servo power rail. Deliberately reconnect servo power and repeat attachment and calibration afterward. Disconnect **both** supplies before handling wiring, electrical connectors, or the mechanical assembly.
+Pulse widths (`pulse_min` and `pulse_max`, initially 750 and 2250 microseconds) are not adjustable live. A changed pulse mapping can change the physical center and travel. If your particular servo needs another mapping, stop DeskBot and unplug the CRICKIT barrel supply. Keep Pi USB-C power on for SSH, then use `nano configs/deskbot.toml` to edit the pulse values, set `calibrated = false`, and restore narrow bounds. With the barrel unplugged, the HAT diode prevents Pi USB-C from feeding the servo power rail. Repeat detached centering and horn alignment for the affected axis before assembled calibration. Disconnect **both** supplies before handling wiring, electrical connectors, or the mechanical assembly.
 
 ## Expand only after checking clearance
 

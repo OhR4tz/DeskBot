@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
+import signal
 import sys
 import time
 
@@ -11,10 +13,71 @@ from .config import Config, load, save, with_axis
 from .motion import Motion, Pose, FakeServos
 
 
+@contextmanager
+def _shutdown_as_interrupt():
+    """Route service stop and SSH hangup through interactive cleanup."""
+    previous = {}
+
+    def interrupt(_number, _frame):
+        raise KeyboardInterrupt
+
+    try:
+        signals = (signal.SIGTERM,)
+        if hasattr(signal, "SIGHUP"):
+            signals += (signal.SIGHUP,)
+        for name in signals:
+            previous[name] = signal.getsignal(name)
+            signal.signal(name, interrupt)
+        yield
+    finally:
+        for name, handler in previous.items():
+            signal.signal(name, handler)
+
+
+@_shutdown_as_interrupt()
+def center_servo(config: Config, name: str) -> None:
+    """Operator-gated single-axis centering while its horn is unloaded."""
+    if name not in ("pan", "tilt"):
+        raise ValueError("axis must be pan or tilt")
+    axis = getattr(config, name)
+    port = 1 if name == "pan" else 2
+    angle = axis.servo_angle(0)
+    pulse = axis.pulse_min + (axis.pulse_max - axis.pulse_min) * angle / 180
+    print(f"Center {name} ONLY on CRICKIT servo port {port}: {angle:g} degrees, nominal {pulse:g} us.")
+    print("First unplug BOTH Pi USB-C and CRICKIT barrel power to detach the head/linkage.")
+    print("Secure the unloaded servo and keep its horn clear; then power both supplies for centering.")
+    try:
+        acknowledged = input("Type DETACHED only after the linkage is disconnected and servo secured: ")
+    except (EOFError, KeyboardInterrupt):
+        acknowledged = ""
+    if acknowledged.strip() != "DETACHED":
+        print("Canceled without accessing servo hardware.")
+        return
+    from .motion import CrickitSingleServo
+    servo = CrickitSingleServo(config, name)
+    try:
+        servo.center()
+        input("Selected servo is centered. Observe it settle, then press Enter to release: ")
+    except (EOFError, KeyboardInterrupt):
+        pass
+    finally:
+        try:
+            servo.close()
+        except OSError as error:
+            raise RuntimeError(
+                f"Could not confirm {name} servo release; disconnect CRICKIT barrel power: {error}"
+            ) from error
+    print("Selected servo released. Shut down and unplug BOTH supplies before reattaching the horn")
+    print("with the head aligned forward. Preserve the centered shaft position; do not force it.")
+
+
+@_shutdown_as_interrupt()
 def calibrate(path: Path, config: Config) -> None:
     print("Manual calibration of the ASSEMBLED head. Pan port 1, tilt port 2.")
     print("Pi uses USB-C; CRICKIT DC jack 5 V/4 A. Keep fingers and cable clear.")
-    print("Start near neutral without forcing gears; disconnect both supplies before hardware adjustments.")
+    print("For unknown servo neutral, use center-servo pan and center-servo tilt with each linkage")
+    print("detached before assembled ATTACH. Pointing the head forward alone does not center a servo.")
+    print("Disconnect both supplies before mechanical adjustments; never force gears.")
     print("Attaching commands the configured center; disconnect power if it binds.")
     print("Start at narrow bounds, jog in <=2 degree steps, then expand ranges gradually.")
     print("Goal after clearance checks: pan -55..55, tilt -15..15 world degrees.")
@@ -143,6 +206,8 @@ def main(argv: list[str] | None = None) -> int:
     observe_cmd = subs.choices["observe"]
     observe_cmd.add_argument("--preview", action="store_true")
     subs.add_parser("calibrate", help="interactive small-step assembled-head calibration")
+    center_cmd = subs.add_parser("center-servo", help="center one detached servo before assembled calibration")
+    center_cmd.add_argument("axis", choices=("pan", "tilt"))
     args = parser.parse_args(argv)
     try:
         config = load(args.config)
@@ -150,11 +215,13 @@ def main(argv: list[str] | None = None) -> int:
             simulate(config)
         elif args.command == "calibrate":
             calibrate(args.config, config)
+        elif args.command == "center-servo":
+            center_servo(config, args.axis)
         else:
             from .app import run
             run(config, hardware=getattr(args, "enable_servos", False),
                 preview=args.preview, observe_only=args.command == "observe")
-    except (ValueError, FileNotFoundError, ImportError, RuntimeError) as error:
+    except (ValueError, FileNotFoundError, ImportError, RuntimeError, OSError) as error:
         print(f"DeskBot: {error}", file=sys.stderr)
         return 2
     return 0

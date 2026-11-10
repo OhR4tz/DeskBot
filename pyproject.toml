@@ -10,7 +10,10 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
-pi = ["adafruit-circuitpython-crickit>=2.3"]
+pi = [
+    "adafruit-circuitpython-crickit>=2.3",
+    "Adafruit-Blinka-Raspberry-Pi-PWM>=1.0.2; sys_platform == 'linux' and platform_machine == 'aarch64'",
+]
 vision = ["mediapipe>=1.2.2,<2", "numpy<2.4"]
 
 [project.scripts]

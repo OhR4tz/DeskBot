@@ -75,9 +75,9 @@ cd ~/DeskBot
 bash scripts/preflight-pi.sh
 ```
 
-The installer checks for a real 64-bit Raspberry Pi running Trixie, enables I2C, installs the Pi camera packages and dependencies, creates `.venv` with access to system packages, and installs DeskBot with its Pi and vision extras. It also downloads the official hand model into `models/hand_landmarker.task`; this model is not bundled in Git. Internet access is needed for installation and downloads.
+The installer checks for a real 64-bit Raspberry Pi running Trixie, enables I2C, installs the Pi camera packages and dependencies, creates `.venv` with access to system packages, and installs DeskBot with its Pi and vision extras. On Linux/aarch64, the Pi extra includes `Adafruit-Blinka-Raspberry-Pi-PWM>=1.0.2`, the native PWM dependency needed by the current Blinka stack. It also downloads the official hand model into `models/hand_landmarker.task`; this model is not bundled in Git. Internet access is needed for installation and downloads.
 
-Preflight checks the two model paths, Python imports, I2C bus, and detected cameras. It **does not initialize or move the servos**. Expect the AI Camera in `rpicam-hello --list-cameras`. First camera startup can take time while the IMX500 model is loaded.
+Preflight checks both model paths, imports Picamera2, MediaPipe, `pwmio`, and `adafruit_motor.servo`, and checks that the CRICKIT driver package is installed. It checks the I2C device exists and requires an IMX500 to be enumerated by Picamera2, then lists cameras with `rpicam-hello --list-cameras`. It **does not open the CRICKIT board's I2C connection or initialize or move the servos**, so leave the barrel unplugged. The actual board connection is checked later during powered, unloaded servo centering. First camera inference startup can take time while the IMX500 model is loaded.
 
 If setup stops, fix the reported error before proceeding. Useful checks are:
 
@@ -88,7 +88,7 @@ rpicam-hello --list-cameras
 ls -l /dev/i2c-1
 ```
 
-The architecture should be `aarch64` and the OS codename `trixie`. For a missing camera, shut down and disconnect both supplies before checking the ribbon. For a missing I2C bus, rerun the installer and reboot. For missing model files or failed package downloads, rerun the installer after restoring connectivity.
+The architecture should be `aarch64` and the OS codename `trixie`. Preflight stops with an explicit error if no IMX500 is enumerated. For a missing camera, shut down and disconnect both supplies before checking the ribbon, then boot again. For a missing I2C bus, rerun the installer and reboot. For missing model files, failed package downloads, or a missing native PWM dependency, rerun the installer after restoring connectivity.
 
 ## 6. Try simulation and the camera
 
@@ -104,7 +104,7 @@ This short simulation uses fake detections and fake servos; it needs no camera o
 .venv/bin/deskbot observe
 ```
 
-`observe` runs the real camera and hand detector and prints status about once a second, without opening servo hardware. Stand far enough back for a person box and hold a hand within your body's camera region. Test with one hand at a time initially. `person=yes` means a fresh selected detection; `stale` means the recent target is being retained temporarily. `reaction=rock_on` or `reaction=finger_gun` shows a recognized reaction. A steady pose triggers once; relax the hand before trying again and allow the cooldown.
+`observe` runs the real camera and hand detector and prints status about once a second, without opening servo hardware. Stand far enough back for a person box and hold a hand within your body's camera region. Test with one hand at a time initially. `person=yes` means a fresh selected detection; `stale` means the recent target is being retained temporarily. `reaction=rock_on` shows the happy nod/wiggle trigger. `reaction=middle_finger` shows the downcast-glance trigger: extend the middle finger while curling the index, ring, and little fingers; the thumb position is unrestricted. A steady pose triggers once; relax the hand before trying again and allow the cooldown.
 
 Press **Ctrl+C** to stop. Then try the same pipeline with simulated motion:
 
@@ -116,7 +116,7 @@ This is still a dry run: real servo hardware requires the explicit `--enable-ser
 
 ## 7. Calibrate, then run interactively
 
-Complete [assembled-head calibration](calibration.md) before adding the hardware flag. Once the guide is complete and the head is supported near its checked neutral position:
+Follow [the calibration guide](calibration.md) before adding the hardware flag. First electrically center each unknown servo separately with its linkage mechanically unloaded, then index the horns with both supplies off, and only then use assembled `calibrate` → `ATTACH`. Do not try an unknown assembled center simply by pointing the unpowered head forward. Once the full guide is complete and the head is supported near its checked neutral position:
 
 ```bash
 .venv/bin/deskbot run --enable-servos
@@ -172,7 +172,7 @@ The service uses the same configuration and releases both servo channels on norm
 
 ## 9. Check the 2 GB Pi under load
 
-Defaults are 640 × 480, a requested camera-rate cap of 10 FPS, four camera buffers, one detected hand, and no preview. Actual processing FPS may be lower. These defaults have not yet been benchmarked on the 2 GB Pi.
+Defaults are 640 × 480, a requested camera-rate cap of 10 FPS, four camera buffers, one detected hand, and no preview. A short warmed sample on the 2 GB Pi reached 10 FPS; [the measured results and conditions](architecture.md#repository-map-and-development-checks) are recorded separately. Actual throughput and resource use can vary, so check your own run rather than treating that sample as a long-run guarantee.
 
 While `observe` or a validated run is active, use a second SSH session:
 

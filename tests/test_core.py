@@ -5,10 +5,12 @@ from pathlib import Path
 import contextlib
 import io
 import signal
+import sys
+from types import SimpleNamespace
 
 from deskbot.app import Robot, run
 from deskbot.behavior import Behavior
-from deskbot.cli import calibrate
+from deskbot.cli import calibrate, center_servo
 from deskbot.config import Axis, Config, load, save
 from deskbot.gesture import GestureGate, Point, classify
 from deskbot.motion import CrickitServos, FakeServos, Motion, Pose
@@ -30,16 +32,29 @@ def hand_pose(kind):
                17:(.61,.59), 18:(.66,.47), 19:(.68,.36), 20:(.70,.27)}
     for i, value in changes.items():
         xy[i] = value
-    if kind == 'love':
+    if kind in ('love', 'old_gun', 'middle_thumb_out', 'open'):
         xy[4] = (.18,.48)
-    if kind in ('gun', 'side_gun', 'forward_gun'):
-        xy[4] = (.18,.48)
+    if kind in ('middle', 'middle_thumb_out', 'fist'):
+        xy[7], xy[8] = (.44,.49), (.44,.59)
         xy[18], xy[19], xy[20] = (.66,.47), (.66,.56), (.64,.64)
-        xy[6], xy[7], xy[8] = (.43,.45), (.42,.39), (.41,.34 if kind == 'gun' else .17)
-    if kind == 'forward_gun':
+    if kind in ('middle', 'middle_thumb_out'):
+        xy[10], xy[11], xy[12] = (.49,.40), (.49,.26), (.49,.12)
+    if kind == 'old_gun':
         for i in (5, 6, 7, 8):
             xy[i] = (.44, .55)
-    depth = {6: -.06, 7: -.12, 8: -.18} if kind in ('gun', 'forward_gun') else {}
+        xy[18], xy[19], xy[20] = (.66,.47), (.66,.56), (.64,.64)
+    if kind == 'index_only':
+        xy[18], xy[19], xy[20] = (.66,.47), (.66,.56), (.64,.64)
+    if kind == 'peace':
+        xy[10], xy[11], xy[12] = (.49,.40), (.49,.26), (.49,.12)
+        xy[18], xy[19], xy[20] = (.66,.47), (.66,.56), (.64,.64)
+    if kind == 'open':
+        for m, p, dip, tip in ((9,10,11,12), (13,14,15,16)):
+            xy[dip] = (xy[p][0] + (xy[p][0] - xy[m][0]),
+                       xy[p][1] + (xy[p][1] - xy[m][1]))
+            xy[tip] = (xy[p][0] + 2 * (xy[p][0] - xy[m][0]),
+                       xy[p][1] + 2 * (xy[p][1] - xy[m][1]))
+    depth = {6: -.06, 7: -.12, 8: -.18} if kind == 'old_gun' else {}
     return [Point(x, y, depth.get(i, 0))
             for i, (x,y) in enumerate(xy)]
 
@@ -113,6 +128,148 @@ class MotionTests(unittest.TestCase):
         self.assertEqual(servos.tilt.writes, [None])
 
 
+class CenterServoTests(unittest.TestCase):
+    class Servo:
+        def __init__(self):
+            self.writes = []
+            self.pulse_range = None
+            self.actuation_range = None
+
+        @property
+        def angle(self):
+            return self.writes[-1] if self.writes else None
+
+        @angle.setter
+        def angle(self, value):
+            self.writes.append(value)
+
+        def set_pulse_width_range(self, *, min_pulse, max_pulse):
+            self.pulse_range = (min_pulse, max_pulse)
+
+    class Board:
+        def __init__(self):
+            self.pan = CenterServoTests.Servo()
+            self.tilt = CenterServoTests.Servo()
+            self.accesses = []
+
+        @property
+        def servo_1(self):
+            self.accesses.append('servo_1')
+            return self.pan
+
+        @property
+        def servo_2(self):
+            self.accesses.append('servo_2')
+            return self.tilt
+
+    def test_only_selected_channel_is_initialized_centered_and_released(self):
+        cfg = replace(config(), tilt=Axis(96, -1, -15, 15))
+        for name, port, center in (('pan', 'servo_1', 90), ('tilt', 'servo_2', 96)):
+            with self.subTest(name=name):
+                board = self.Board()
+                with patch.dict(sys.modules, {'adafruit_crickit': SimpleNamespace(crickit=board)}), \
+                     patch('builtins.input', side_effect=['DETACHED', '']), \
+                     contextlib.redirect_stdout(io.StringIO()):
+                    center_servo(cfg, name)
+                selected = board.pan if name == 'pan' else board.tilt
+                other = board.tilt if name == 'pan' else board.pan
+                self.assertEqual(board.accesses, [port])
+                self.assertEqual(selected.writes, [center, None])
+                self.assertEqual(selected.pulse_range, (750, 2250))
+                self.assertEqual(selected.actuation_range, 180)
+                self.assertEqual(other.writes, [])
+                self.assertIsNone(other.pulse_range)
+
+    def test_cancel_does_not_access_hardware(self):
+        for response in ('no', EOFError):
+            with self.subTest(response=response), \
+                 patch('deskbot.motion.CrickitSingleServo') as hardware, \
+                 patch('builtins.input', side_effect=[response]), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                center_servo(config(), 'pan')
+                hardware.assert_not_called()
+
+    def test_eof_after_center_releases_selected_channel(self):
+        board = self.Board()
+        with patch.dict(sys.modules, {'adafruit_crickit': SimpleNamespace(crickit=board)}), \
+             patch('builtins.input', side_effect=['DETACHED', EOFError]), \
+             contextlib.redirect_stdout(io.StringIO()):
+            center_servo(config(), 'tilt')
+        self.assertEqual(board.accesses, ['servo_2'])
+        self.assertEqual(board.tilt.writes, [90, None])
+        self.assertEqual(board.pan.writes, [])
+
+    def test_lost_board_during_release_has_clear_error(self):
+        class LostBoardServo(self.Servo):
+            @self.Servo.angle.setter
+            def angle(self, value):
+                self.writes.append(value)
+                if value is None:
+                    raise OSError('I2C missing')
+        board = self.Board()
+        board.pan = LostBoardServo()
+        prior_term = signal.getsignal(signal.SIGTERM)
+        prior_hup = signal.getsignal(signal.SIGHUP) if hasattr(signal, 'SIGHUP') else None
+        with patch.dict(sys.modules, {'adafruit_crickit': SimpleNamespace(crickit=board)}), \
+             patch('builtins.input', side_effect=['DETACHED', '']), \
+             contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(RuntimeError, 'disconnect CRICKIT barrel power'):
+                center_servo(config(), 'pan')
+        self.assertEqual(board.pan.writes, [90, None])
+        self.assertEqual(board.tilt.writes, [])
+        self.assertIs(signal.getsignal(signal.SIGTERM), prior_term)
+        if prior_hup is not None:
+            self.assertIs(signal.getsignal(signal.SIGHUP), prior_hup)
+
+    def test_shutdown_signals_release_only_selected_servo_and_restore_handlers(self):
+        cases = [(signal.SIGTERM, 'pan')]
+        if hasattr(signal, 'SIGHUP'):
+            cases.append((signal.SIGHUP, 'tilt'))
+        for signum, name in cases:
+            with self.subTest(signum=signum, name=name):
+                board = self.Board()
+                prior = signal.getsignal(signum)
+                calls = 0
+                def reply(_prompt):
+                    nonlocal calls
+                    calls += 1
+                    if calls == 1:
+                        return 'DETACHED'
+                    signal.getsignal(signum)(signum, None)
+                with patch.dict(sys.modules, {'adafruit_crickit': SimpleNamespace(crickit=board)}), \
+                     patch('builtins.input', side_effect=reply), \
+                     contextlib.redirect_stdout(io.StringIO()):
+                    center_servo(config(), name)
+                selected = board.pan if name == 'pan' else board.tilt
+                other = board.tilt if name == 'pan' else board.pan
+                self.assertEqual(selected.writes, [90, None])
+                self.assertEqual(other.writes, [])
+                self.assertIs(signal.getsignal(signum), prior)
+
+    def test_calibration_shutdown_signal_uses_existing_cleanup(self):
+        backend = FakeServos()
+        backend.closed = False
+        def close():
+            backend.closed = True
+        backend.close = close
+        signum = signal.SIGHUP if hasattr(signal, 'SIGHUP') else signal.SIGTERM
+        prior = signal.getsignal(signum)
+        calls = 0
+        def reply(_prompt):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return 'ATTACH'
+            signal.getsignal(signum)(signum, None)
+        with patch('deskbot.motion.CrickitServos', return_value=backend), \
+             patch('builtins.input', side_effect=reply), \
+             contextlib.redirect_stdout(io.StringIO()):
+            calibrate(Path('tests/_unused.toml'), config())
+        self.assertTrue(backend.closed)
+        self.assertEqual(list(backend.angles), [(90, 90)])
+        self.assertIs(signal.getsignal(signum), prior)
+
+
 class TrackerTests(unittest.TestCase):
     def test_sticky_target_and_stale_expiry(self):
         tracker = TargetTracker(config())
@@ -130,22 +287,23 @@ class TrackerTests(unittest.TestCase):
 
 
 class GestureTests(unittest.TestCase):
-    def test_geometry(self):
+    def test_rock_on_and_middle_finger_geometry(self):
         self.assertEqual(classify(hand_pose('rock')), 'rock_on')
-        self.assertIsNone(classify(hand_pose('love')))
-        self.assertEqual(classify(hand_pose('gun')), 'finger_gun')
-        self.assertEqual(classify(hand_pose('forward_gun')), 'finger_gun')
-        self.assertIsNone(classify(hand_pose('side_gun')))
+        self.assertEqual(classify(hand_pose('middle')), 'middle_finger')
+        self.assertEqual(classify(hand_pose('middle_thumb_out')), 'middle_finger')
         for size in (.6, 1.2):
             scaled = [Point(.5 + (p.x - .5) * size,
                             .5 + (p.y - .5) * size, p.z * size)
-                      for p in hand_pose('forward_gun')]
-            self.assertEqual(classify(scaled), 'finger_gun')
-        open_palm = hand_pose('love')
-        for m, p, t in ((9,10,12), (13,14,16)):
-            open_palm[t] = Point(open_palm[p].x + (open_palm[p].x - open_palm[m].x),
-                                 open_palm[p].y + (open_palm[p].y - open_palm[m].y))
-        self.assertIsNone(classify(open_palm))
+                      for p in hand_pose('middle')]
+            mirrored = [Point(1 - p.x, p.y, p.z) for p in scaled]
+            self.assertEqual(classify(scaled), 'middle_finger')
+            self.assertEqual(classify(mirrored), 'middle_finger')
+
+    def test_other_hand_poses_do_not_trigger(self):
+        self.assertIsNone(classify(hand_pose('love')))
+        for kind in ('fist', 'open', 'index_only', 'old_gun', 'peace'):
+            with self.subTest(kind=kind):
+                self.assertIsNone(classify(hand_pose(kind)))
 
     def test_debounce_rearm_and_cooldown(self):
         gate = GestureGate(3, 2)
@@ -161,11 +319,41 @@ class GestureTests(unittest.TestCase):
     def test_busy_gate_does_not_consume_trigger(self):
         gate = GestureGate(3, 2)
         for t in (0, .1, .2):
-            self.assertIsNone(gate.update('finger_gun', t, enabled=False))
-        self.assertEqual(gate.update('finger_gun', .3), 'finger_gun')
+            self.assertIsNone(gate.update('middle_finger', t, enabled=False))
+        self.assertEqual(gate.update('middle_finger', .3), 'middle_finger')
 
 
 class IntegrationTests(unittest.TestCase):
+    def test_middle_finger_downcast_resumes_tracking_and_rearms(self):
+        cfg = config()
+        backend = FakeServos()
+        motion = Motion(cfg, backend)
+        motion.start()
+        robot = Robot(cfg, motion)
+        person = [Detection(Box(220, 100, 200, 350), .9)]
+        held = Frame(None, person, [hand_pose('middle')])
+        for t in (0, .1, .2):
+            robot.process(held, t)
+        self.assertEqual(robot.behavior.kind, 'middle_finger')
+        origin = robot.behavior.origin
+        _, downcast = robot.process(held, .3)
+        self.assertEqual(downcast.tilt, cfg.tilt.clamp(origin.tilt - 7))
+        self.assertLess(motion.pose.tilt, origin.tilt)
+        _, resumed = robot.process(held, 1.6)
+        self.assertIsNone(robot.behavior.kind)
+        self.assertEqual(resumed, robot.target)
+        for t in (2.0, 3.5, 3.6):
+            robot.process(held, t)
+        self.assertIsNone(robot.behavior.kind)
+        self.assertAlmostEqual(robot.last_reaction, .2)
+        robot.process(Frame(None, person, []), 3.7)
+        for t in (3.8, 3.9, 4.0):
+            robot.process(held, t)
+        self.assertEqual(robot.behavior.kind, 'middle_finger')
+        self.assertAlmostEqual(robot.last_reaction, 4.0)
+        self.assertTrue(all(35 <= pan <= 145 and 75 <= tilt <= 105
+                            for pan, tilt in backend.angles))
+
     def test_reaction_owns_motion_then_resumes(self):
         backend = FakeServos()
         motion = Motion(config(), backend)

@@ -13,7 +13,7 @@ class Behavior:
         self.origin = Pose()
 
     def trigger(self, kind: str, now: float, pose: Pose) -> bool:
-        if self.kind is not None or kind not in ("rock_on", "finger_gun"):
+        if self.kind is not None or kind not in ("rock_on", "middle_finger"):
             return False
         self.kind = kind
         self.started = now

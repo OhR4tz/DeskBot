@@ -1,4 +1,4 @@
-"""Conservative pose heuristics; monocular depth only suggests forward pointing."""
+"""Conservative landmark geometry for two deliberate hand poses."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -41,17 +41,11 @@ def classify(hand: Sequence[Point], aspect: float = 0.75) -> str | None:
     straight = [a >= 150 for a in angles]
     curled = [a <= 115 for a in angles]
     palm = max(_distance(hand[5], hand[17], aspect), 1e-5)
-    thumb_extended = (_distance(hand[4], hand[17], aspect) > 1.35 * palm and
-                      _angle(hand[2], hand[3], hand[4], aspect) > 140)
     thumb_folded = _distance(hand[4], hand[9], aspect) < 0.95 * palm
     if straight[0] and curled[1] and curled[2] and straight[3] and thumb_folded:
         return "rock_on"
-    if straight[0] and curled[1] and curled[2] and curled[3] and thumb_extended:
-        # Relative depth and foreshortening together suggest pointing at the lens.
-        index_depth = hand[8].z - hand[5].z
-        apparent_length = _distance(hand[8], hand[5], aspect) / palm
-        if index_depth < -0.30 * palm and apparent_length < 1.25:
-            return "finger_gun"
+    if curled[0] and straight[1] and curled[2] and curled[3]:
+        return "middle_finger"
     return None
 
 
