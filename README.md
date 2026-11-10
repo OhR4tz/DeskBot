@@ -20,3 +20,5 @@ Before assembled calibration, use the [detached centering workflow](docs/calibra
 This is a prototype. The hardware-free suite contains 40 tests. On the assembled robot, the operator confirmed pan ±70°, tilt −30°/+40°, all four corners clear, and the final face-tracking tuning. All four gestures appeared in motor-enabled trial logs, and the operator confirmed the revised rock-on nods, thumbs-down wiggle, and thumbs-up circle work. Gesture recognition uses heuristics and can vary with hands, viewpoint, and lighting. See the [validation details](docs/architecture.md#repository-map-and-development-checks).
 
 Private repository: [OhR4tz/DeskBot](https://github.com/OhR4tz/DeskBot). Installation requires access to that repository.
+
+The configured robot runs automatically through `deskbot.service`; startup was verified after a reboot. See [service controls](docs/setup.md#8-optional-start-with-systemd) to stop, restart, or disable it. Calibration and tuning live in the Pi's `configs/deskbot.toml`; syncing source must preserve that robot-specific file.

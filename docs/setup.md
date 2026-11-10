@@ -126,6 +126,23 @@ Watch the robot continuously for this first run and keep both power disconnects 
 
 ## 8. Optional: start with systemd
 
+On the configured DeskBot, this is already installed and enabled. Startup was verified after a reboot, using user `ohr4ts`, project `/home/ohr4ts/DeskBot`, and its calibrated `configs/deskbot.toml`. It runs without an SSH terminal and has no trial timeout. Both the Pi and CRICKIT need their power supplies connected.
+
+Run these controls from a Pi terminal:
+
+| Action | Command |
+| --- | --- |
+| Check status | `systemctl status deskbot --no-pager` |
+| Stop now | `sudo systemctl stop deskbot` |
+| Start now | `sudo systemctl start deskbot` |
+| Restart after a code or config update | `sudo systemctl restart deskbot` |
+| Follow logs | `journalctl -u deskbot -f` |
+| Stop and disable boot startup | `sudo systemctl disable --now deskbot` |
+
+Stop the service before running calibration or another camera process. Preserve `configs/deskbot.toml`, `models/`, and `.venv/` when syncing source updates; the repository's narrow default configuration is not this robot's saved calibration.
+
+For a fresh installation, follow the remaining instructions in this section.
+
 Do this only after successful calibration and repeated interactive hardware runs. A service can energize the head without an interactive prompt, including after a reboot or failure restart. Keep its physical startup position and surroundings safe.
 
 From your normal Pi user account in the project directory, print the actual values and make an editable copy:

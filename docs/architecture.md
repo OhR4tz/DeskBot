@@ -27,7 +27,9 @@ Reactions require repeated matching frames, use a global cooldown, and temporari
 
 The downward reaction waits for the slew-limited commanded pose before starting its hold and return. This is command progress, not measured servo position: MG90S servos provide no feedback. A reaction already underway finishes even if looking away temporarily loses the person detection.
 
-In a follow-on motor-enabled trial on 2026-11-09, the log recorded all four gestures. The operator confirmed the revised rock-on nods, thumbs-down wiggle, and thumbs-up circle all worked. The trial was stopped after confirmation; automatic startup remains unconfigured.
+In a follow-on motor-enabled trial on 2026-11-09, the log recorded all four gestures. The operator confirmed the revised rock-on nods, thumbs-down wiggle, and thumbs-up circle all worked. The trial was stopped after confirmation.
+
+Automatic startup was subsequently installed and verified by reboot on 2026-11-09. The system service `/etc/systemd/system/deskbot.service` runs as `ohr4ts` in `/home/ohr4ts/DeskBot` using its virtual environment and saved calibration. After reboot, it was enabled and active with zero restarts, and the new boot's journal showed face tracking and gesture reactions. The check reported 1,395 MiB available memory, no swap use, and `throttled=0x0`. Unlike the earlier trials, this service has no time limit and is independent of SSH sessions.
 
 ## Motion and configuration
 
