@@ -293,6 +293,17 @@ class TrackerTests(unittest.TestCase):
         tracker.select([Detection(Box(245, 100, 150, 350), .9)], 0)
         self.assertGreaterEqual(tracker.aim(Pose()).tilt, 0)
 
+    def test_pan_tracks_image_side_with_positive_pan_turning_left(self):
+        cfg = config()
+        for x, expected_sign in ((80, 1), (460, -1)):
+            with self.subTest(x=x):
+                tracker = TargetTracker(cfg)
+                tracker.select([Detection(Box(x, 100, 100, 350), .9)], 0)
+                goal = tracker.aim(Pose())
+                self.assertGreater(goal.pan * expected_sign, 0)
+                servo_delta = cfg.pan.servo_angle(goal.pan) - cfg.pan.servo_angle(0)
+                self.assertGreater(servo_delta * cfg.pan.direction * expected_sign, 0)
+
 
 class GestureTests(unittest.TestCase):
     def test_rock_on_and_middle_finger_geometry(self):

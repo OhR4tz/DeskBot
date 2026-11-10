@@ -67,7 +67,7 @@ Commands are typed at `calibrate>`, not at the Linux shell:
 
 Use `tilt` instead of `pan` for its corresponding center, direction, or range command. Jogs must be greater than zero and at most 2° in magnitude. The tool rejects jogs outside the current bounds.
 
-After horn indexing, use tiny jogs to check direction. Positive pan should turn toward a target to the right in the camera image; positive tilt should look upward. Return to neutral before changing `direction`. At neutral, use `center` only for small final trim, at most 2° per edit. Center changes themselves command motion, so inspect each small change. A large offset requires detached electrical centering and power-off horn alignment, not repeated trim commands.
+After horn indexing, use tiny jogs to check direction. Positive pan turns toward the robot's own left (the left side of the unmirrored camera image); positive tilt looks upward. This convention matches the assembled DeskBot's observed motion. Return to neutral before changing `direction`. At neutral, use `center` only for small final trim, at most 2° per edit. Center changes themselves command motion, so inspect each small change. A large offset requires detached electrical centering and power-off horn alignment, not repeated trim commands.
 
 Changing center or direction disarms calibration and clears that axis's endpoint visits. Set them before exploring the larger range. Use `save` to keep the checked settings.
 

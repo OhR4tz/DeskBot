@@ -89,6 +89,7 @@ class TargetTracker:
             ex = 0
         if abs(ey) < self.config.deadband:
             ey = 0
-        # World +pan points right, +tilt points up; camera image +y points down.
-        return Pose(self.config.pan.clamp(current.pan + ex * self.config.pan_gain * 10),
+        # Calibrated world +pan points left, +tilt points up.
+        # The unmirrored camera's image +x points right and +y points down.
+        return Pose(self.config.pan.clamp(current.pan - ex * self.config.pan_gain * 10),
                     self.config.tilt.clamp(current.tilt - ey * self.config.tilt_gain * 10))
