@@ -38,7 +38,6 @@ class Robot:
             self.target = self.tracker.aim(self.motion.pose if self.motion else self.target)
         elif selected is None:
             self.target = self.motion.pose if self.motion else self.target
-            self.behavior.kind = None
         # Assign by wrist proximity, since MediaPipe result order can swap.
         matched: dict[int, Any] = {}
         used: set[int] = set()
@@ -77,7 +76,8 @@ class Robot:
             if event:
                 if self.behavior.trigger(event, now, self.motion.pose if self.motion else self.target):
                     self.last_reaction = now
-        goal = self.behavior.pose(now, self.target)
+        goal = self.behavior.pose(now, self.target,
+                                  self.motion.pose if self.motion else None)
         if self.motion is not None:
             dt = 0.0 if self.last_step is None else now - self.last_step
             self.motion.step(goal, dt)

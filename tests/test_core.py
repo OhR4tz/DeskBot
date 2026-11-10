@@ -343,6 +343,49 @@ class GestureTests(unittest.TestCase):
 
 
 class IntegrationTests(unittest.TestCase):
+    def test_full_downcast_reaches_limit_holds_and_returns_at_slow_frame_rates(self):
+        cfg = replace(config(), tilt=Axis(83, 1, -30, 40), max_speed=60)
+        for interval in (0.1, 0.5):
+            with self.subTest(interval=interval):
+                motion = Motion(cfg, FakeServos())
+                motion.start()
+                origin = Pose(12, 40)
+                motion.pose = origin
+                behavior = Behavior(cfg)
+                behavior.trigger('middle_finger', 0, origin)
+                at_bottom = []
+                for step in range(200):
+                    now = step * interval
+                    goal = behavior.pose(now, origin, motion.pose)
+                    motion.step(goal, interval)
+                    if motion.pose.tilt == cfg.tilt.minimum:
+                        at_bottom.append(now)
+                    if behavior.kind is None:
+                        break
+                self.assertIsNone(behavior.kind)
+                self.assertGreaterEqual(at_bottom[-1] - at_bottom[0], 0.8)
+                self.assertEqual(motion.pose, origin)
+                self.assertTrue(all(cfg.tilt.minimum <= tilt - cfg.tilt.center <= cfg.tilt.maximum
+                                    for _, tilt in motion.servos.angles))
+
+    def test_downcast_continues_after_looking_down_loses_person(self):
+        cfg = replace(config(), tilt=Axis(83, 1, -30, 40), max_speed=60)
+        motion = Motion(cfg, FakeServos())
+        motion.start()
+        robot = Robot(cfg, motion)
+        origin = Pose(0, 40)
+        motion.pose = origin
+        robot.behavior.trigger('middle_finger', 0, origin)
+        lowest = origin.tilt
+        for step in range(100):
+            robot.process(Frame(None, [], []), step / 10)
+            lowest = min(lowest, motion.pose.tilt)
+            if robot.behavior.kind is None:
+                break
+        self.assertEqual(lowest, cfg.tilt.minimum)
+        self.assertIsNone(robot.behavior.kind)
+        self.assertEqual(motion.pose, origin)
+
     def test_middle_finger_downcast_resumes_tracking_and_rearms(self):
         cfg = config()
         backend = FakeServos()
@@ -356,13 +399,12 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(robot.behavior.kind, 'middle_finger')
         origin = robot.behavior.origin
         _, downcast = robot.process(held, .3)
-        self.assertEqual(downcast.tilt, cfg.tilt.clamp(origin.tilt - 7))
+        self.assertEqual(downcast.tilt, cfg.tilt.minimum)
         self.assertLess(motion.pose.tilt, origin.tilt)
-        _, resumed = robot.process(held, 1.6)
+        for step in range(4, 37):
+            _, resumed = robot.process(held, step / 10)
         self.assertIsNone(robot.behavior.kind)
         self.assertEqual(resumed, robot.target)
-        for t in (2.0, 3.5, 3.6):
-            robot.process(held, t)
         self.assertIsNone(robot.behavior.kind)
         self.assertAlmostEqual(robot.last_reaction, .2)
         robot.process(Frame(None, person, []), 3.7)

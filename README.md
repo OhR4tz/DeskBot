@@ -1,6 +1,6 @@
 # DeskBot
 
-DeskBot is a local pan/tilt companion for an assembled RoboBuddy. It follows one visible person and reacts to two hand poses: a small happy nod/wiggle for “rock on” and a downcast glance for a raised middle finger.
+DeskBot is a local pan/tilt companion for an assembled RoboBuddy. It follows one visible person and reacts to two hand poses: a small happy nod/wiggle for “rock on” and a look to the calibrated downward tilt limit for a raised middle finger.
 
 The build uses a **Raspberry Pi 5 with 2 GB RAM**, **one Raspberry Pi AI Camera (IMX500)** in the head, an **Adafruit CRICKIT HAT #3957**, and two positional MG90S servos. CRICKIT port 1 is pan; port 2 is tilt. The same camera supplies on-camera SSD person detections and RGB images for CPU hand recognition. No second camera is needed.
 
@@ -17,6 +17,6 @@ Before assembled calibration, use the [detached centering workflow](docs/calibra
 
 **Power:** use the Pi's USB-C wall supply and the CRICKIT's 5 V / 4 A barrel supply. Their rails are diode coupled through the HAT, so unplugging Pi USB-C alone does not guarantee that the Pi is off. Shut down and disconnect **both supplies** before wiring or adjusting the assembly.
 
-This is a prototype. All 26 hardware-free tests, simulation, and preflight pass on the 2 GB Pi. Both gestures triggered once per held pose in a real-camera trial without motor commands. A short warmed sample met the requested 10 FPS; this is not a long-run performance guarantee. Detached pan centering and a tilt level baseline have been checked, while assembled calibration, physical tracking/reaction motion, and clearances still need validation. Gesture recognition uses heuristics and can vary with hands, viewpoint, and lighting. See the [validation details](docs/architecture.md#repository-map-and-development-checks).
+This is a prototype. The hardware-free suite contains 29 tests. On the assembled robot, the operator confirmed pan ±70°, tilt −30°/+40°, all four corners clear, and tracking in the correct direction. Both gestures were recognized during a motor-enabled trial. Faster tracking and a full downward middle-finger reaction are the latest tuning changes. Gesture recognition uses heuristics and can vary with hands, viewpoint, and lighting. See the [validation details](docs/architecture.md#repository-map-and-development-checks).
 
 Private repository: [OhR4tz/DeskBot](https://github.com/OhR4tz/DeskBot). Installation requires access to that repository.

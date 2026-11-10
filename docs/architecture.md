@@ -17,15 +17,17 @@ The gesture classifier uses aspect-corrected 3D finger angles and palm-normalize
 | Pose | Intended reaction |
 | --- | --- |
 | Rock on: index and little finger extended, middle/ring curled, thumb folded | About 1.5 seconds of nodding and small pan wiggles. |
-| Raised middle finger: middle extended, index/ring/little curled, thumb unrestricted | About 1.3 seconds of a downcast glance and return. |
+| Raised middle finger: middle extended, index/ring/little curled, thumb unrestricted | Move to the configured downward tilt limit, hold for 0.8 seconds after commanded arrival, then return to the triggering pose before tracking resumes. |
 
 Reactions require repeated matching frames, use a global cooldown, and temporarily own motion before tracking resumes. Release the pose to rearm. The heuristic thresholds need actual hand, viewpoint, distance, and lighting tests. The “I love you” pose with an extended thumb is intended to be rejected as rock on. Status uses `rock_on` and `middle_finger` for the two reactions.
+
+The downward reaction waits for the slew-limited commanded pose before starting its hold and return. This is command progress, not measured servo position: MG90S servos provide no feedback. A reaction already underway finishes even if looking away temporarily loses the person detection.
 
 ## Motion and configuration
 
 Only `motion.py` writes servo commands. It maps world-relative pan/tilt through each axis's center and direction, clamps targets, and limits travel rate. Startup directly commands the configured centers because positional MG90S servos provide no position feedback. First electrically center each unknown servo unloaded, then index its horn with power off; see [the centering and initial-jump precautions](calibration.md#before-the-first-attachment).
 
-Both axes have a configurable ceiling of ±60°, including the user-requested tilt extension. Shipped bounds remain pan ±10° and tilt ±5°, and the existing jog, range-edit, and speed guards remain in place. Accepted bounds do not establish physical clearance.
+Configurable ceilings are pan ±70° and tilt ±60°. Shipped bounds remain pan ±10° and tilt ±5°, and the existing jog, range-edit, and speed guards remain in place. Accepted bounds do not establish physical clearance. Positive world pan points toward the robot's own left; positive tilt points up.
 
 `center-servo pan|tilt` requires the exact `DETACHED` acknowledgement before hardware access and commands only that axis at its configured center (default 90°, nominally 1500 microseconds). It waits for Enter, then releases that channel in cleanup. Centering and interactive calibration also handle SIGTERM and SSH hangup through cleanup and restore the previous signal handlers. Centering performs no sweep and does not arm calibration. It cannot verify that the linkage was actually detached.
 
@@ -75,7 +77,7 @@ python -m unittest discover -s tests -v
 deskbot simulate
 ```
 
-The current 26-test hardware-free suite passes. Initial Windows development checks used Python 3.13.11 and also covered simulation and Python compilation. A blank-image API smoke check passed with MediaPipe 1.2.2, NumPy 2.3.5, and the official hand model; the package build and Bash syntax were also checked.
+The current 29-test hardware-free suite includes tracking direction, full downward travel and hold at reduced frame rates, and reaction completion after target loss. Initial Windows development checks used Python 3.13.11 and also covered simulation and Python compilation. A blank-image API smoke check passed with MediaPipe 1.2.2, NumPy 2.3.5, and the official hand model; the package build and Bash syntax were also checked.
 
 The `pi` extra includes Adafruit CRICKIT and, specifically on Linux/aarch64, `Adafruit-Blinka-Raspberry-Pi-PWM>=1.0.2`, which supplies the native PWM dependency required by the current Blinka stack. The installer also adds MediaPipe and OS-managed Picamera2, OpenCV, IMX500 support, and camera models. Models are installed/downloaded separately.
 
@@ -101,6 +103,8 @@ A separate 55-second real-camera trial classified `middle_finger` in 192 frames 
 
 After the CRICKIT barrel supply was connected, the board responded at I2C address `0x49`. The first assembled center attempt caused a large unexpected rightward pan and cable binding; barrel power was cut and calibration stopped. That movement does not establish a software offset or a safe travel range.
 
-In recovery, pan was mechanically unloaded and `center-servo pan` commanded port 1 only. The servo settled with the head stationary, as confirmed by the operator, then was released and powered off for horn re-indexing. A robot-specific tilt level baseline was later saved with calibration still disarmed; that baseline does not establish full-range clearance. Assembled calibration, physical tracking/reaction motion, and clearance remain unvalidated.
+In recovery, both servos were electrically centered unloaded and their horns re-indexed. On 2026-11-09, the operator confirmed straight-ahead pan center 97°, level tilt center 83°, both directions +1, pan −70°/+70°, tilt −30°/+40°, and clearance at all four combined corners. Pulse limits remain 750–2250 microseconds. The calibration tool visited both endpoints of both axes and saved `calibrated = true` after the operator's confirmation. These values apply to this assembled robot, not to another horn indexing or cable routing.
+
+A 90-second motor-enabled trial followed that calibration. The operator confirmed correct tracking direction, and the log recorded both `middle_finger` and `rock_on` reactions. The timed run stopped automatically; the health check reported 51°C and `throttled=0x0`. The operator requested quicker movement and a more pronounced downward reaction. The updated robot profile uses `pan_gain = 0.5`, `tilt_gain = 0.35`, and `max_speed = 60.0`, while preserving the checked travel limits. Shipped defaults remain conservative; the faster profile needs operator assessment during its next trial.
 
 Implementation references: [Raspberry Pi AI Camera](https://www.raspberrypi.com/documentation/accessories/ai-camera.html), [official IMX500 object-detection example](https://github.com/raspberrypi/picamera2-examples/blob/main/examples/imx500/imx500_object_detection_demo.py), [MediaPipe Hand Landmarker](https://developers.google.com/edge/mediapipe/solutions/vision/hand_landmarker), and [MediaPipe Python setup](https://developers.google.com/edge/mediapipe/solutions/setup_python). The target OS comes from [Raspberry Pi OS](https://www.raspberrypi.com/software/operating-systems/).
